@@ -1,9 +1,25 @@
-module Main (
-    main
-  ) where
+module Main where
 
-import Lib (introMessage)
+import Lexer
+import Parser
+import Interpreter
+import System.Environment (getArgs)
+import Data.Char (isSpace)
 
 main :: IO ()
-main =
-  putStrLn introMessage
+main = do
+  args <- getArgs
+  
+  if null args
+    then putStrLn "Usage: interpreter <query-file>"
+    else do
+      let fileName = head args
+      content <- readFile fileName
+      let tokens = alexScanTokens content
+      let ast = parse tokens
+      
+      putStrLn "Parsed AST:"
+      print ast
+      
+      putStrLn "\nQuery Result:"
+      interpret ast

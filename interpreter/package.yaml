@@ -19,6 +19,7 @@ description: Alex and Happy project.
 dependencies:
 - base >= 4.7 && < 5
 - array
+- containers
 
 ghc-options:
 - -Wall
