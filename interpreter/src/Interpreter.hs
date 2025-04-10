@@ -35,7 +35,7 @@ interpret (Query fromClause whereClause operations) = do
   -- Print the result
   printTable finalTable
 
--- Create environment from table (for simplicity we'll just use the first row)
+-- Create environment from table (just use the first row)
 createEnv :: Table -> Env
 createEnv [] = M.empty
 createEnv (firstRow:_) = firstRow
@@ -43,7 +43,7 @@ createEnv (firstRow:_) = firstRow
 -- Load data from files specified in the FROM clause
 loadData :: FromClause -> IO Table
 loadData (From fileNames) = do
-  -- For simplicity, we'll assume files are CSV with header
+  -- For simplicity, assume files are CSV with header
   tables <- mapM loadCSV fileNames
   -- If multiple files, we could join them here
   return $ if null tables then [] else head tables
