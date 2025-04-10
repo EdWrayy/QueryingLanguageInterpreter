@@ -10,7 +10,6 @@ import Lexer
 
 %token
   from        { PT _ TokenFrom}
-  where       { PT _ TokenWhere}
   do          { PT _ TokenDo}
   select      { PT _ TokenSelect}
   filter      { PT _ TokenFilter}
@@ -19,58 +18,49 @@ import Lexer
   '!='        { PT _ TokenNotEquals}
   ','         { PT _ TokenComma}
   string      { PT _ (TokenString $$) }
-  identifier  { PT _ (TokenIdentifier $$) }
+  int         { PT _ (TokenInt $$) }
 
 
 %%
 -- Main query structure
-Query : From OptWhere Operations  { Query $1 $2 $3 }
+Query : From Operations  { Query $1 $2 }
 
 -- From clause with file identifiers
-From : from StringList    { From $2 }
-
-StringList : string               { [$1] }
-           | string ',' StringList { $1 : $3 }
-
-IdentList : identifier               { [$1] }
-          | identifier ',' IdentList { $1 : $3 }
-
--- Optional Where clause
-OptWhere : where Condition { Just $2 }
-         | {- empty -}     { Nothing }
-
--- Condition expressions
-Condition : identifier '=' identifier    { Equals $1 $3 }
-          | identifier '!=' identifier   { NotEquals $1 $3 }
-
+From : from string    { From $2 }
+ 
 -- Operations section
 Operations : do OperationList  { $2 }
 
 -- List of operations, possibly separated by pipes
-OperationList : Operation                { [$1] }
+OperationList : Operation                   { [$1] }
               | Operation '>' OperationList { $1 : $3 }
 
 -- Different types of operations
-Operation : select IdentList   { Select $2 }
+Operation : select IntList   { Select $2 }
           | filter Condition   { Filter $2 }
 
+-- Integer list for column indices
+IntList : int               { [$1] }
+        | int ',' IntList   { $1 : $3 }
 
- 
+-- Condition expressions
+Condition : int '=' string    { Equals $1 $3 }
+          | int '!=' string   { NotEquals $1 $3 }
 
 {
-data Query = Query FromClause (Maybe Condition) [Operation]
+data Query = Query FromClause [Operation]
   deriving (Show, Eq)
 
-data FromClause = From [String]
+data FromClause = From String
   deriving (Show, Eq)
 
 data Condition
-  = Equals String String
-  | NotEquals String String
+  = Equals Int String
+  | NotEquals Int String
   deriving (Show, Eq)
 
 data Operation
-  = Select [String]
+  = Select [Int]
   | Filter Condition
   deriving (Show, Eq)
 

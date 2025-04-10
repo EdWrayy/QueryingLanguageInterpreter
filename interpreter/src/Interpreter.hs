@@ -6,47 +6,27 @@ import qualified Data.List as L
 import Data.Maybe (fromMaybe)
 import System.IO
 
--- Data types to represent our data model
-type ColumnName = String
-type Value = String
-type Row = M.Map ColumnName Value
-type Table = [Row]
+ -- A table is a list of rows, each row is a list of strings
+type Table = [[String]]
 
--- Environment to store identifiers
-type Env = M.Map String String
 
--- Main interpreter function
+--Main interpret function
 interpret :: Query -> IO ()
-interpret (Query fromClause whereClause operations) = do
-  -- Load data from files
+interpret (Query fromClause operations) = do
+  -- Load data from file
   table <- loadData fromClause
   
-  -- Create an environment for evaluation
-  let env = createEnv table
-  
-  -- Apply where clause if present
-  let filteredTable = case whereClause of
-                        Just condition -> filterByCondition env condition table
-                        Nothing -> table
-  
-  -- Apply operations in sequence
-  let finalTable = foldl (applyOperation env) filteredTable operations
+  -- Apply operations in sequence (as a pipeline)
+  let finalTable = foldl applyOperation table operations
   
   -- Print the result
   printTable finalTable
 
--- Create environment from table (just use the first row)
-createEnv :: Table -> Env
-createEnv [] = M.empty
-createEnv (firstRow:_) = firstRow
 
--- Load data from files specified in the FROM clause
+-- Load data from file specified in the FROM clause
 loadData :: FromClause -> IO Table
-loadData (From fileNames) = do
-  -- For simplicity, assume files are CSV with header
-  tables <- mapM loadCSV fileNames
-  -- If multiple files, we could join them here
-  return $ if null tables then [] else head tables
+loadData (From fileName) = loadCSV fileName
+
 
 -- Load a CSV file into a Table
 loadCSV :: String -> IO Table
@@ -60,13 +40,7 @@ loadCSV fileName = do
     else do
       content <- readFile fileName
       let rows = lines content
-      if null rows
-        then return []
-        else do
-          let headers = parseCSVLine (head rows)
-              dataRows = map parseCSVLine (tail rows)
-              table = map (makeRow headers) dataRows
-          return table
+      return $ map parseCSVLine rows
 
 -- Check if file exists
 doesFileExist :: FilePath -> IO Bool
@@ -78,6 +52,7 @@ doesFileExist path = do
       return True
     Left _ -> 
       return False
+
 
 -- Try IO action and catch errors
 tryIOError :: IO a -> IO (Either IOError a)
@@ -100,49 +75,41 @@ splitOn delim str = case break (== delim) str of
   (a, _:b) -> a : splitOn delim b
   (a, "")  -> [a]
 
--- Create a row from headers and values
-makeRow :: [ColumnName] -> [Value] -> Row
-makeRow headers values = M.fromList (zip headers values)
-
--- Filter table by condition
-filterByCondition :: Env -> Condition -> Table -> Table
-filterByCondition env condition = filter (evaluateCondition env condition)
-
--- Evaluate a condition on a row
-evaluateCondition :: Env -> Condition -> Row -> Bool
-evaluateCondition env (Equals id1 id2) row = 
-  resolveValue env id1 row == resolveValue env id2 row
-evaluateCondition env (NotEquals id1 id2) row = 
-  resolveValue env id1 row /= resolveValue env id2 row
-
--- Resolve a value from either environment or row
-resolveValue :: Env -> String -> Row -> String
-resolveValue env id row = 
-  case M.lookup id row of
-    Just value -> value
-    Nothing -> fromMaybe id (M.lookup id env)  -- Treat identifiers as literals if not found
-
 -- Apply operation to table
-applyOperation :: Env -> Table -> Operation -> Table
-applyOperation env table (Select columns) = map (selectColumns columns) table
-applyOperation env table (Filter condition) = filterByCondition env condition table
+applyOperation :: Table -> Operation -> Table
+applyOperation table (Select indices) = 
+  if null table then [] else
+    let header = head table
+        rows = tail table
+    in [selectColumns indices row | row <- table]
+applyOperation table (Filter condition) = 
+  if null table then [] else
+    let header = head table
+        rows = tail table
+    in header : filter (evaluateCondition header condition) rows
+
 
 -- Select only specified columns from a row
-selectColumns :: [ColumnName] -> Row -> Row
-selectColumns columns row = 
-  if null columns
-    then row  -- If no columns specified, return all
-    else M.filterWithKey (\k _ -> k `elem` columns) row
+selectColumns :: [Int] -> [String] -> [String]
+selectColumns indices row = 
+  if null indices
+    then row  -- If no indices specified, return all
+    else [row !! i | i <- indices, i >= 0 && i < length row]
+
+-- Evaluate a condition on a row
+evaluateCondition :: [String] -> Condition -> [String] -> Bool
+evaluateCondition _ (Equals colIdx value) row = 
+  if colIdx >= 0 && colIdx < length row then
+    row !! colIdx == value
+  else False
+evaluateCondition _ (NotEquals colIdx value) row = 
+  if colIdx >= 0 && colIdx < length row then
+    row !! colIdx /= value
+  else False
 
 -- Print the table
 printTable :: Table -> IO ()
 printTable [] = putStrLn "Empty result"
 printTable table = do
-  let allColumns = L.nub $ concatMap M.keys table
-  
-  -- Print header
-  putStrLn $ L.intercalate "," allColumns
-  
-  -- Print rows
-  mapM_ (\row -> putStrLn $ L.intercalate "," 
-         [fromMaybe "" (M.lookup col row) | col <- allColumns]) table
+  -- Print each row as CSV
+  mapM_ (putStrLn . L.intercalate ",") table

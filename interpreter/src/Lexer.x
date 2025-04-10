@@ -8,7 +8,6 @@ $digit = 0-9
 $alpha = [a-zA-Z]
 $alphaNum = [a-zA-Z0-9]
 
-@identifier = $alpha ($alphaNum | '_')*
 
 tokens :-
   $white+                ;   -- Ignore whitespace
@@ -16,7 +15,6 @@ tokens :-
   
   -- Keywords (case sensitive for simplicity)
   from                   { \p s -> PT p TokenFrom}
-  where                  { \p s -> PT p TokenWhere}
   do                     { \p s -> PT p TokenDo}
   select                 { \p s -> PT p TokenSelect}
   filter                 { \p s -> PT p TokenFilter}
@@ -28,11 +26,11 @@ tokens :-
   ","                    { \p s -> PT p TokenComma}
   
   
-  --String literals
-  \"[^\"]*\"   { \p s -> PT p (TokenString (init (tail s))) }
+  --Primitives
+  $digit+                { \p s -> PT p (TokenInt (read s)) }
+  \"[^\"]*\"             { \p s -> PT p (TokenString (init (tail s))) }
   
-  -- Identifiers
-  @identifier            { \p s -> PT p (TokenIdentifier s) }
+ 
 
 
 
@@ -42,7 +40,6 @@ data PosnToken = PT AlexPosn Token deriving (Eq, Show)
 data Token = 
   -- Keywords
     TokenFrom  
-  | TokenWhere 
   | TokenDo 
   | TokenSelect 
   | TokenFilter 
@@ -55,9 +52,8 @@ data Token =
 
   --Primitives
   | TokenString String
+  | TokenInt Int
   
-  -- Identifiers
-  | TokenIdentifier String
   deriving (Eq, Show)
 
 
