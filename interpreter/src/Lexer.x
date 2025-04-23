@@ -18,6 +18,7 @@ tokens :-
   do                     { \p s -> PT p TokenDo}
   select                 { \p s -> PT p TokenSelect}
   filter                 { \p s -> PT p TokenFilter}
+  leftMerge              { \p s -> PT p TokenLeftMerge}
   
   -- Operators and symbols
   ">"                    { \p s -> PT p TokenPipe}
@@ -42,7 +43,8 @@ data Token =
     TokenFrom  
   | TokenDo 
   | TokenSelect 
-  | TokenFilter 
+  | TokenFilter
+  | TokenLeftMerge 
   
   -- Operators and symbols
   | TokenPipe 

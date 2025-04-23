@@ -13,6 +13,7 @@ import Lexer
   do          { PT _ TokenDo}
   select      { PT _ TokenSelect}
   filter      { PT _ TokenFilter}
+  leftMerge   { PT _ TokenLeftMerge}
   '>'         { PT _ TokenPipe}
   '='         { PT _ TokenEquals}
   '!='        { PT _ TokenNotEquals}
@@ -26,7 +27,10 @@ import Lexer
 Query : From Operations  { Query $1 $2 }
 
 -- From clause with file identifiers
+-- From : from string    { From $2 }
 From : from string    { From $2 }
+     | from string ',' string {FromPair $2 $4}
+
  
 -- Operations section
 Operations : do OperationList  { $2 }
@@ -38,6 +42,7 @@ OperationList : Operation                   { [$1] }
 -- Different types of operations
 Operation : select IntList   { Select $2 }
           | filter Condition   { Filter $2 }
+          | leftMerge          { LeftMerge }
 
 -- Integer list for column indices
 IntList : int               { [$1] }
@@ -51,8 +56,10 @@ Condition : int '=' string    { Equals $1 $3 }
 data Query = Query FromClause [Operation]
   deriving (Show, Eq)
 
+
 data FromClause = From String
-  deriving (Show, Eq)
+                | FromPair String String
+                deriving (Show, Eq)
 
 data Condition
   = Equals Int String
@@ -62,6 +69,7 @@ data Condition
 data Operation
   = Select [Int]
   | Filter Condition
+  | LeftMerge
   deriving (Show, Eq)
 
 -- === Error Handling ===

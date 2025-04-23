@@ -12,8 +12,21 @@ type Table = [[String]]
 
 --Main interpret function
 interpret :: Query -> IO ()
-interpret (Query fromClause operations) = do
-  -- Load data from file
+interpret (Query fromClause operations) = case fromClause of
+    -- Case for a single file (From)
+    From file -> do
+        table <- loadCSV file
+        let finalTable = foldl applyOperation table operations
+        printTable finalTable
+
+    -- Case for two files (FromPair)
+    FromPair file1 file2 -> do
+        table1 <- loadCSV file1
+        table2 <- loadCSV file2
+        let finalTable = foldl (applyOp2 table2) table1 operations
+        printTable finalTable
+
+  {-- Load data from file
   table <- loadData fromClause
   
   -- Apply operations in sequence (as a pipeline)
@@ -21,6 +34,7 @@ interpret (Query fromClause operations) = do
   
   -- Print the result
   printTable finalTable
+--}
 
 
 -- Load data from file specified in the FROM clause
@@ -89,6 +103,11 @@ applyOperation table (Filter condition) =
     in header : filter (evaluateCondition header condition) rows
 
 
+-- Apply Operation when there are 2 files
+applyOp2 :: Table -> Table -> Operation -> Table
+applyOp2 secondary primary LeftMerge = leftMerge primary secondary
+applyOp2 _ primary op = applyOperation primary op
+
 -- Select only specified columns from a row
 selectColumns :: [Int] -> [String] -> [String]
 selectColumns indices row = 
@@ -113,3 +132,18 @@ printTable [] = putStrLn "Empty result"
 printTable table = do
   -- Print each row as CSV
   mapM_ (putStrLn . L.intercalate ",") table
+
+-- Merge two rows: prefer p's value unless it's empty
+mergeRows :: [String] -> [String] -> [String]
+mergeRows p q = zipWith choose p q
+  where choose "" qVal = qVal
+        choose pVal _  = pVal
+
+-- Perform left merge based on the first column - could generalise it later
+leftMerge :: Table -> Table -> Table
+leftMerge p q = 
+  [ p1 : mergeRows (tail pRow) (tail qRow)
+  | pRow@(p1:_) <- p
+  , qRow@(q1:_) <- q
+  , p1 == q1
+  ]
