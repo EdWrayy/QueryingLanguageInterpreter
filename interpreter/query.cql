@@ -1,2 +1,2 @@
-from "employees.csv" do
-filter 2 = "Engineering" > select 1, 3
+from "employees.csv" to "testOutput.csv" do
+filter 2 = "Engineering" -> select 1, 3

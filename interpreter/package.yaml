@@ -20,6 +20,10 @@ dependencies:
 - base >= 4.7 && < 5
 - array
 - containers
+- directory
+- bytestring
+- cassava
+- vector
 
 ghc-options:
 - -Wall

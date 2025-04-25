@@ -10,11 +10,12 @@ import Lexer
 
 %token
   from        { PT _ TokenFrom}
+  to          { PT _ TokenTo}
   do          { PT _ TokenDo}
   select      { PT _ TokenSelect}
   filter      { PT _ TokenFilter}
   leftMerge   { PT _ TokenLeftMerge}
-  '>'         { PT _ TokenPipe}
+  '->'         { PT _ TokenPipe}
   '='         { PT _ TokenEquals}
   '!='        { PT _ TokenNotEquals}
   ','         { PT _ TokenComma}
@@ -24,20 +25,22 @@ import Lexer
 
 %%
 -- Main query structure
-Query : From Operations  { Query $1 $2 }
+Query : FromClause ToClause do OperationList  { Query $1 $2 $4 }
 
--- From clause with file identifiers
--- From : from string    { From $2 }
-From : from string    { From $2 }
-     | from string ',' string {FromPair $2 $4}
+--From clause, can be a single file or a pair of files
+FromClause : from string    { From $2 }
+           | from string ',' string {FromPair $2 $4}
 
- 
+-- Optional To clause
+ToClause : {- empty -}    { Nothing }
+         | to string      { Just $2 }
+
 -- Operations section
 Operations : do OperationList  { $2 }
 
 -- List of operations, possibly separated by pipes
 OperationList : Operation                   { [$1] }
-              | Operation '>' OperationList { $1 : $3 }
+              | Operation '->' OperationList { $1 : $3 }
 
 -- Different types of operations
 Operation : select IntList   { Select $2 }
@@ -53,7 +56,7 @@ Condition : int '=' string    { Equals $1 $3 }
           | int '!=' string   { NotEquals $1 $3 }
 
 {
-data Query = Query FromClause [Operation]
+data Query = Query FromClause (Maybe String) [Operation]
   deriving (Show, Eq)
 
 

@@ -5,19 +5,24 @@ import qualified Data.Map as M
 import qualified Data.List as L
 import Data.Maybe (fromMaybe)
 import System.IO
+import System.Directory
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.Csv as Csv
+import qualified Data.Vector as V
+import Data.Csv (encodeDefaultOrderedByName)
 
- -- A table is a list of rows, each row is a list of strings
+-- A table is a list of rows, each row is a list of strings
 type Table = [[String]]
-
 
 --Main interpret function
 interpret :: Query -> IO ()
-interpret (Query fromClause operations) = case fromClause of
+interpret (Query fromClause outputFile operations) = case fromClause of
     -- Case for a single file (From)
     From file -> do
         table <- loadCSV file
         let finalTable = foldl applyOperation table operations
         printTable finalTable
+        outputResult outputFile finalTable
 
     -- Case for two files (FromPair)
     FromPair file1 file2 -> do
@@ -25,83 +30,37 @@ interpret (Query fromClause operations) = case fromClause of
         table2 <- loadCSV file2
         let finalTable = foldl (applyOp2 table2) table1 operations
         printTable finalTable
+        outputResult outputFile finalTable
 
-  {-- Load data from file
-  table <- loadData fromClause
-  
-  -- Apply operations in sequence (as a pipeline)
-  let finalTable = foldl applyOperation table operations
-  
-  -- Print the result
-  printTable finalTable
---}
-
-
--- Load data from file specified in the FROM clause
-loadData :: FromClause -> IO Table
-loadData (From fileName) = loadCSV fileName
-
-
--- Load a CSV file into a Table
+-- Load a CSV file into a Table using cassava
 loadCSV :: String -> IO Table
 loadCSV fileName = do
   putStrLn $ "Loading file: " ++ fileName
   exists <- doesFileExist fileName
   if not exists
     then do
-      putStrLn $ "Warning: File " ++ fileName ++ " not found. Using empty table."
+      putStrLn $ "File " ++ fileName ++ " not found. Query will be done with empty table."
       return []
     else do
-      content <- readFile fileName
-      let rows = lines content
-      return $ map parseCSVLine rows
-
--- Check if file exists
-doesFileExist :: FilePath -> IO Bool
-doesFileExist path = do
-  result <- tryIOError (openFile path ReadMode)
-  case result of
-    Right handle -> do
-      hClose handle
-      return True
-    Left _ -> 
-      return False
-
-
--- Try IO action and catch errors
-tryIOError :: IO a -> IO (Either IOError a)
-tryIOError action = do
-  result <- try action
-  return result
-  where
-    try :: IO a -> IO (Either IOError a)
-    try a = (Right <$> a) `catch` (return . Left)
-    catch :: IO a -> (IOError -> IO a) -> IO a
-    catch a handler = a `seq` a
-
--- Parse a CSV line into a list of values
-parseCSVLine :: String -> [String]
-parseCSVLine = splitOn ','
-
--- Split a string by a delimiter
-splitOn :: Char -> String -> [String]
-splitOn delim str = case break (== delim) str of
-  (a, _:b) -> a : splitOn delim b
-  (a, "")  -> [a]
+      csvData <- BL.readFile fileName
+      case Csv.decode Csv.NoHeader csvData of
+        Left err -> do
+          putStrLn $ "Error parsing CSV: " ++ err
+          return []
+        Right v -> return $ map V.toList (V.toList v)
 
 -- Apply operation to table
 applyOperation :: Table -> Operation -> Table
-applyOperation table (Select indices) = 
+applyOperation table (Select indices) =
   if null table then [] else
     let header = head table
         rows = tail table
     in [selectColumns indices row | row <- table]
-applyOperation table (Filter condition) = 
+applyOperation table (Filter condition) =
   if null table then [] else
     let header = head table
         rows = tail table
     in header : filter (evaluateCondition header condition) rows
-
 
 -- Apply Operation when there are 2 files
 applyOp2 :: Table -> Table -> Operation -> Table
@@ -110,21 +69,17 @@ applyOp2 _ primary op = applyOperation primary op
 
 -- Select only specified columns from a row
 selectColumns :: [Int] -> [String] -> [String]
-selectColumns indices row = 
+selectColumns indices row =
   if null indices
     then row  -- If no indices specified, return all
     else [row !! i | i <- indices, i >= 0 && i < length row]
 
 -- Evaluate a condition on a row
 evaluateCondition :: [String] -> Condition -> [String] -> Bool
-evaluateCondition _ (Equals colIdx value) row = 
-  if colIdx >= 0 && colIdx < length row then
-    row !! colIdx == value
-  else False
-evaluateCondition _ (NotEquals colIdx value) row = 
-  if colIdx >= 0 && colIdx < length row then
-    row !! colIdx /= value
-  else False
+evaluateCondition _ (Equals colIdx value) row =
+  (colIdx >= 0 && colIdx < length row) && (row !! colIdx == value)
+evaluateCondition _ (NotEquals colIdx value) row =
+  (colIdx >= 0 && colIdx < length row) && (row !! colIdx /= value)
 
 -- Print the table
 printTable :: Table -> IO ()
@@ -132,6 +87,19 @@ printTable [] = putStrLn "Empty result"
 printTable table = do
   -- Print each row as CSV
   mapM_ (putStrLn . L.intercalate ",") table
+
+outputResult :: Maybe String -> Table -> IO ()
+outputResult Nothing table = printTable table  -- Output to console if no output file
+outputResult (Just fileName) table = writeTableToCSV fileName table
+
+-- Write table to CSV using cassava
+writeTableToCSV :: String -> Table -> IO ()
+writeTableToCSV fileName table = do
+    putStrLn $ "Writing output to file: " ++ fileName
+    -- Convert Table to Vector of Vector String for cassava
+    let csvData = Csv.encode $ map V.fromList table
+    BL.writeFile fileName csvData
+    putStrLn $ "Output written to " ++ fileName
 
 -- Merge two rows: prefer p's value unless it's empty
 mergeRows :: [String] -> [String] -> [String]
@@ -141,7 +109,7 @@ mergeRows p q = zipWith choose p q
 
 -- Perform left merge based on the first column - could generalise it later
 leftMerge :: Table -> Table -> Table
-leftMerge p q = 
+leftMerge p q =
   [ p1 : mergeRows (tail pRow) (tail qRow)
   | pRow@(p1:_) <- p
   , qRow@(q1:_) <- q
