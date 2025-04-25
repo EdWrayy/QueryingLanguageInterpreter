@@ -15,13 +15,14 @@ tokens :-
   
   -- Keywords (case sensitive for simplicity)
   from                   { \p s -> PT p TokenFrom}
+  to                     { \p s -> PT p TokenTo}
   do                     { \p s -> PT p TokenDo}
   select                 { \p s -> PT p TokenSelect}
   filter                 { \p s -> PT p TokenFilter}
   leftMerge              { \p s -> PT p TokenLeftMerge}
   
   -- Operators and symbols
-  ">"                    { \p s -> PT p TokenPipe}
+  "->"                    { \p s -> PT p TokenPipe}
   "="                    { \p s -> PT p TokenEquals}
   "!="                   { \p s -> PT p TokenNotEquals}
   ","                    { \p s -> PT p TokenComma}
@@ -41,6 +42,7 @@ data PosnToken = PT AlexPosn Token deriving (Eq, Show)
 data Token = 
   -- Keywords
     TokenFrom  
+  | TokenTo
   | TokenDo 
   | TokenSelect 
   | TokenFilter
