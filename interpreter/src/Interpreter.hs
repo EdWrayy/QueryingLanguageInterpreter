@@ -11,6 +11,7 @@ import qualified Data.Csv as Csv
 import qualified Data.Vector as V
 import Data.Csv (encodeDefaultOrderedByName)
 
+
 -- A table is a list of rows, each row is a list of strings
 type Table = [[String]]
 
@@ -18,17 +19,28 @@ type Table = [[String]]
 interpret :: Query -> IO ()
 interpret (Query fromClause outputFile operations) = case fromClause of
     -- Case for a single file (From)
-    From file -> do
-        table <- loadCSV file
-        let finalTable = foldl applyOperation table operations
-        printTable finalTable
-        outputResult outputFile finalTable
+    From file hasLabels -> do
+        if hasLabels then do
+          table <- loadCSV file
+          let finalTable = foldl applyOperation table operations
+          printTable finalTable
+          outputResult outputFile finalTable
+        else do 
+          let width = length (head table)
+          let tableWithDefaultHeaders = (map show [0 .. width - 1]) : table
+          let computedTable = foldl applyOperation tableWithDefaultHeaders operations
+          let finalTable = tail computedTable
+          printTable finalTable
+          outputResult outputFile finalTable
 
     -- Case for two files (FromPair)
-    FromPair file1 file2 -> do
-        table1 <- loadCSV file1
-        table2 <- loadCSV file2
-        let finalTable = foldl (applyOp2 table2) table1 operations
+    FromPair file1 file2 hasLabels -> do
+        let width1 = length (head table1)
+        let width2 = length (head table2)
+        let table1WithHeaders = (map show [0 .. width1 - 1]) : table1
+        let table2WithHeaders = (map show [0 .. width2 - 1]) : table2
+        let computedTable = foldl (applyOp2 table2WithHeaders) table1WithHeaders operations
+        let finalTable = tail computedTable
         printTable finalTable
         outputResult outputFile finalTable
 
@@ -74,6 +86,13 @@ applyOperation table (Filter condition) =
     let header = head table
         rows = tail table
     in header : filter (evaluateCondition header condition) rows
+applyOperation table (GroupBy colID aggFunc) = --Result will be a collapsed table, containing only the group with their corresponding results for the aggregation function
+  if null table then [] else
+    let header =  [("Group_" ++ show colIdx), show aggFunc] -- Similar to SQL, create a new header for grouped columns representing the aggregation function applied
+        rows = tail table
+        grouped = groupByColumn colID rows
+        aggregated = map (aggregateRows aggFunc) grouped
+    in header : map (concat . map snd) aggregated
 
 -- Apply Operation when there are 2 files
 applyOp2 :: Table -> Table -> Operation -> Table
@@ -93,6 +112,12 @@ evaluateCondition _ (Equals colIdx value) row =
   (colIdx >= 0 && colIdx < length row) && (row !! colIdx == value)
 evaluateCondition _ (NotEquals colIdx value) row =
   (colIdx >= 0 && colIdx < length row) && (row !! colIdx /= value)
+
+
+groupByColumn :: Int -> [[String]] -> [(String, [[String]])] -- Matches columns to their group
+groupByColumn colID rows =
+  let grouped = M.fromListWith (++) [(row !! colID, [row]) | row <- rows]
+  in M.elems grouped
 
 -- Print the table
 printTable :: Table -> IO ()
