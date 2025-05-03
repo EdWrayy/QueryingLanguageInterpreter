@@ -32,6 +32,8 @@ interpret (Query fromClause outputFile operations) = case fromClause of
         printTable finalTable
         outputResult outputFile finalTable
 
+
+
 -- Load a CSV file into a Table using cassava
 loadCSV :: String -> IO Table
 loadCSV fileName = do
@@ -47,7 +49,18 @@ loadCSV fileName = do
         Left err -> do
           putStrLn $ "Error parsing CSV: " ++ err
           return []
-        Right v -> return $ map V.toList (V.toList v)
+        Right v -> 
+          let table = map V.toList (V.toList v)
+          in if validateUniformArity table
+              then return table
+              else do
+                putStrLn $ "Error: File " ++ fileName ++ " has non-uniform arity."
+                return []
+
+--Check that each row has the same number of columns
+validateUniformArity :: Table -> Bool
+validateUniformArity [] = True
+validateUniformArity (r:rs) = all (\row -> length row == length r) rs
 
 -- Apply operation to table
 applyOperation :: Table -> Operation -> Table
@@ -92,14 +105,22 @@ outputResult :: Maybe String -> Table -> IO ()
 outputResult Nothing table = printTable table  -- Output to console if no output file
 outputResult (Just fileName) table = writeTableToCSV fileName table
 
+
 -- Write table to CSV using cassava
 writeTableToCSV :: String -> Table -> IO ()
 writeTableToCSV fileName table = do
     putStrLn $ "Writing output to file: " ++ fileName
     -- Convert Table to Vector of Vector String for cassava
     let csvData = Csv.encode $ map V.fromList table
-    BL.writeFile fileName csvData
+        cleanData = removeTrailingNewline csvData --Renove trailing newline if present
+    BL.writeFile fileName cleanData
     putStrLn $ "Output written to " ++ fileName
+
+removeTrailingNewline :: BL.ByteString -> BL.ByteString
+removeTrailingNewline bs
+  | BL.null bs = bs
+  | BL.last bs == 10 = BL.init bs  -- 10 is ASCII for newline
+  | otherwise = bs
 
 -- Merge two rows: prefer p's value unless it's empty
 mergeRows :: [String] -> [String] -> [String]
