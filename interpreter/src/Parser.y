@@ -1,5 +1,5 @@
 {
-module Parser where
+module Parser (parse, Query(..), FromClause(..), Operation(..), Condition(..), AggregateFunc(..), Condition) where
 
 import Lexer
 }
@@ -17,9 +17,17 @@ import Lexer
   filter      { PT _ TokenFilter}
   leftMerge   { PT _ TokenLeftMerge}
   '->'         { PT _ TokenPipe}
-  '='         { PT _ TokenEquals}
+  '=='         { PT _ TokenEquals}
   '!='        { PT _ TokenNotEquals}
   ','         { PT _ TokenComma}
+  '>'         { PT _ TokenGreaterThan }
+  '<'         { PT _ TokenLessThan }
+  '>='        { PT _ TokenGreaterThanEquals }
+  '<='        { PT _ TokenLessThanEquals }
+  '!'         { PT _ TokenNot }
+  '&&'        { PT _ TokenAnd }
+  '||'        { PT _ TokenOr }
+  '++'        { PT _ TokenConcatOp }
   string      { PT _ (TokenString $$) }
   int         { PT _ (TokenInt $$) }
   groupBy    { PT _ TokenGroupBy }
@@ -28,6 +36,8 @@ import Lexer
   avg        { PT _ TokenAvg }
   min        { PT _ TokenMin }
   max        { PT _ TokenMax }
+  concat     { PT _ TokenConcat }
+  concatDist { PT _ TokenConcatDist }
 
 
 %%
@@ -57,19 +67,29 @@ Operation : select IntList   { Select $2 }
           | leftMerge          { LeftMerge }
           | groupBy int AggregateFunc { GroupBy $2 $3 }
 
+
 AggregateFunc : sum   { Sum }
               | count { Count }
               | avg   { Avg }
               | min   { Min }
               | max   { Max }
+              | concat { Concat}
+              | concatDist {ConcatDist}
 
 -- Integer list for column indices
 IntList : int               { [$1] }
         | int ',' IntList   { $1 : $3 }
 
 -- Condition expressions
-Condition : int '=' string    { Equals $1 $3 }
+Condition : int '==' string    { Equals $1 $3 }
           | int '!=' string   { NotEquals $1 $3 }
+          | int '>' int               { GreaterThan $1 $3 }
+          | int '<' int               { LessThan $1 $3 }
+          | int '>=' int              { GreaterThanEq $1 $3 }
+          | int '<=' int              { LessThanEq $1 $3 }
+          | '!' Condition             { Not $2 }
+          | Condition '&&' Condition  { And $1 $3 }
+          | Condition '||' Condition  { Or $1 $3 }
 
 {
 data Query = Query FromClause (Maybe String) [Operation]
@@ -83,6 +103,13 @@ data FromClause = From String Bool
 data Condition
   = Equals Int String
   | NotEquals Int String
+  | GreaterThan Int Int
+  | LessThan Int Int
+  | GreaterThanEq Int Int
+  | LessThanEq Int Int
+  | Not Condition
+  | And Condition Condition
+  | Or Condition Condition
   deriving (Show, Eq)
 
 data Operation
@@ -92,7 +119,7 @@ data Operation
   | GroupBy Int AggregateFunc
   deriving (Show, Eq)
 
-data AggregateFunc = Sum | Count | Avg | Min | Max
+data AggregateFunc = Sum | Count | Avg | Min | Max | Concat | ConcatDist  
   deriving (Show, Eq)
 
 -- === Error Handling ===

@@ -3,7 +3,7 @@ module Interpreter where
 import Parser
 import qualified Data.Map as M
 import qualified Data.List as L
-import Data.Maybe (fromMaybe)
+import Data.Maybe
 import System.IO
 import System.Directory
 import qualified Data.ByteString.Lazy as BL
@@ -20,8 +20,8 @@ interpret :: Query -> IO ()
 interpret (Query fromClause outputFile operations) = case fromClause of
     -- Case for a single file (From)
     From file hasLabels -> do
+        table <- loadCSV file
         if hasLabels then do
-          table <- loadCSV file
           let finalTable = foldl applyOperation table operations
           printTable finalTable
           outputResult outputFile finalTable
@@ -35,14 +35,22 @@ interpret (Query fromClause outputFile operations) = case fromClause of
 
     -- Case for two files (FromPair)
     FromPair file1 file2 hasLabels -> do
-        let width1 = length (head table1)
-        let width2 = length (head table2)
-        let table1WithHeaders = (map show [0 .. width1 - 1]) : table1
-        let table2WithHeaders = (map show [0 .. width2 - 1]) : table2
-        let computedTable = foldl (applyOp2 table2WithHeaders) table1WithHeaders operations
-        let finalTable = tail computedTable
-        printTable finalTable
-        outputResult outputFile finalTable
+      table1 <- loadCSV file1
+      table2 <- loadCSV file2
+
+      let (table1WithHeaders, table2WithHeaders) = if hasLabels
+          then (table1, table2)
+          else
+            let width1 = length (head table1)
+                width2 = length (head table2)
+                t1h = (map show [0 .. width1 - 1]) : table1
+                t2h = (map show [0 .. width2 - 1]) : table2
+            in (t1h, t2h)
+
+      let computedTable = foldl (applyOp2 table2WithHeaders) table1WithHeaders operations
+      let finalTable = if hasLabels then computedTable else tail computedTable
+      printTable finalTable
+      outputResult outputFile finalTable
 
 
 
@@ -87,12 +95,14 @@ applyOperation table (Filter condition) =
         rows = tail table
     in header : filter (evaluateCondition header condition) rows
 applyOperation table (GroupBy colID aggFunc) = --Result will be a collapsed table, containing only the group with their corresponding results for the aggregation function
-  if null table then [] else
-    let header =  [("Group_" ++ show colIdx), show aggFunc] -- Similar to SQL, create a new header for grouped columns representing the aggregation function applied
-        rows = tail table
-        grouped = groupByColumn colID rows
-        aggregated = map (aggregateRows aggFunc) grouped
-    in header : map (concat . map snd) aggregated
+  if null table then [] else 
+  let header = head table
+      rows = tail table
+      grouped = groupByColumn colID rows
+      aggregated = map (aggregateGroup colID aggFunc) grouped
+      newHeader = [header !! colID, show aggFunc]
+    in newHeader : aggregated
+
 
 -- Apply Operation when there are 2 files
 applyOp2 :: Table -> Table -> Operation -> Table
@@ -112,12 +122,80 @@ evaluateCondition _ (Equals colIdx value) row =
   (colIdx >= 0 && colIdx < length row) && (row !! colIdx == value)
 evaluateCondition _ (NotEquals colIdx value) row =
   (colIdx >= 0 && colIdx < length row) && (row !! colIdx /= value)
+evaluateCondition _ (LessThan colIdx val) row =
+  case parseDouble (row !! colIdx) of
+    Just x -> x < fromIntegral val
+    Nothing -> False
+evaluateCondition _ (GreaterThan colIdx val) row =
+  case parseDouble (row !! colIdx) of
+    Just x -> x > fromIntegral val
+    Nothing -> False
+evaluateCondition _ (LessThanEq colIdx val) row =
+  case parseDouble (row !! colIdx) of
+    Just x -> x <= fromIntegral val
+    Nothing -> False
+evaluateCondition _ (GreaterThanEq colIdx val) row =
+  case parseDouble (row !! colIdx) of
+    Just x -> x >= fromIntegral val
+    Nothing -> False
+evaluateCondition _ (And cond1 cond2) row =
+  evaluateCondition row cond1 row && evaluateCondition row cond2 row
+evaluateCondition _ (Or cond1 cond2) row =
+  evaluateCondition row cond1 row || evaluateCondition row cond2 row
+evaluateCondition _ (Not cond) row =
+  not $ evaluateCondition row cond row
 
 
-groupByColumn :: Int -> [[String]] -> [(String, [[String]])] -- Matches columns to their group
+
+groupByColumn :: Int -> [[String]] -> [(String, [[String]])]
 groupByColumn colID rows =
-  let grouped = M.fromListWith (++) [(row !! colID, [row]) | row <- rows]
-  in M.elems grouped
+  let groups = L.groupBy (\a b -> a !! colID == b !! colID) $
+               L.sortOn (!! colID) rows
+  in [(head g !! colID, g) | g <- groups]
+
+-- Aggregate a group of rows (supports both numeric and string operations)
+aggregateGroup :: Int -> AggregateFunc -> (String, [[String]]) -> [String]
+aggregateGroup groupColIdx aggFunc (groupKey, rows) =
+  let 
+    allValues = concatMap (extractValues groupColIdx) rows
+      
+    extractValues groupColIdx row = [row !! i | i <- [0..length row - 1], i /= groupColIdx]
+      
+    result = case aggFunc of
+      Sum -> case mapMaybe parseDouble allValues of
+        [] -> "0"
+        nums -> show $ sum nums
+                 
+      Avg -> case mapMaybe parseDouble allValues of
+        [] -> "0"
+        nums -> show $ sum nums / fromIntegral (length nums)
+                 
+      Count -> show $ length rows
+                 
+      Min -> case allValues of
+        [] -> ""
+        vs -> minimum vs  -- Works for strings too (lexicographic order)
+                 
+      Max -> case allValues of
+        [] -> ""
+        vs -> maximum vs  -- Works for strings too (lexicographic order)
+                 
+      -- Additional string-specific aggregates
+      Concat -> case allValues of
+        [] -> ""
+        vs -> concat vs   -- Concatenate all strings
+                 
+      ConcatDist -> case allValues of
+        [] -> ""
+        vs -> concat $ L.nub vs  -- Concatenate unique strings
+    in [groupKey, result]
+
+parseDouble :: String -> Maybe Double
+parseDouble s = case reads s of
+  [(x, "")] -> Just x
+  _ -> Nothing
+
+
 
 -- Print the table
 printTable :: Table -> IO ()
