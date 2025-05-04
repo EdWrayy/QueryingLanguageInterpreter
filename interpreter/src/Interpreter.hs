@@ -104,6 +104,39 @@ applyOperation table (GroupBy colID aggFunc) = --Result will be a collapsed tabl
     in newHeader : aggregated
 
 
+-- Rename operation
+applyOperation table (Rename idx newName) =
+  case table of
+    [] -> []
+    (header:rows) ->
+      let newHeader = updateAt idx newName header
+      in newHeader : rows
+
+-- Drop operation
+applyOperation table (Drop indices) =
+  let dropIndices = L.sort indices
+  in map (dropAtIndices dropIndices) table
+
+-- Sort operation
+applyOperation table (Sort colIdx order) =
+  case table of
+    [] -> []
+    (header:rows) ->
+      let sortedRows = L.sortBy (compareRows colIdx order) rows
+      in header : sortedRows
+
+-- Add column operation
+applyOperation table (AddColumn name defaultVal) =
+  case table of
+    [] -> [[name], [defaultVal]]
+    (header:rows) ->
+      let newHeader = header ++ [name]
+          newRows = map (++ [defaultVal]) rows
+      in newHeader : newRows
+
+-- Append row operation
+applyOperation table (AppendRow values) = table ++ [values]
+
 -- Apply Operation when there are 2 files
 applyOp2 :: Table -> Table -> Operation -> Table
 applyOp2 secondary primary LeftMerge = leftMerge primary secondary
@@ -239,3 +272,19 @@ leftMerge p q =
   , qRow@(q1:_) <- q
   , p1 == q1
   ]
+
+ -- Helper Functions
+
+updateAt :: Int -> a -> [a] -> [a]
+updateAt idx val xs = take idx xs ++ [val] ++ drop (idx + 1) xs
+
+dropAtIndices :: [Int] -> [a] -> [a]
+dropAtIndices indices row = [x | (i, x) <- zip [0..] row, i `notElem` indices]
+
+compareRows :: Int -> SortOrder -> [String] -> [String] -> Ordering
+compareRows idx Asc  = \r1 r2 -> compare (safeIndex idx r1) (safeIndex idx r2)
+compareRows idx Desc = \r1 r2 -> compare (safeIndex idx r2) (safeIndex idx r1)
+
+safeIndex :: Int -> [a] -> a
+safeIndex i xs = if i < length xs then xs !! i else error "Index out of bounds"
+

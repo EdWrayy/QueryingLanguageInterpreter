@@ -12,7 +12,7 @@ $alphaNum = [a-zA-Z0-9]
 tokens :-
   $white+                ;   -- Ignore whitespace
   "--".*                 ;   -- Ignore comments
-  
+
   -- Keywords (case sensitive for simplicity)
   from                   { \p s -> PT p TokenFrom}
   to                     { \p s -> PT p TokenTo}
@@ -20,8 +20,17 @@ tokens :-
   select                 { \p s -> PT p TokenSelect}
   filter                 { \p s -> PT p TokenFilter}
   leftMerge              { \p s -> PT p TokenLeftMerge}
+
+  rename                 { \p s -> PT p TokenRename}
+  drop                   { \p s -> PT p TokenDrop}
+  sort                   { \p s -> PT p TokenSort}
+  addColumn              { \p s -> PT p TokenAddColumn}
+  appendRow              { \p s -> PT p TokenAppendRow}
+  asc                    { \p s -> PT p TokenAsc}
+  desc                   { \p s -> PT p TokenDesc}
   raw                    { \p s -> PT p TokenRaw }
   
+
   -- Operators and symbols
   "->"                   { \p s -> PT p TokenPipe}
   "=="                   { \p s -> PT p TokenEquals}
@@ -36,6 +45,7 @@ tokens :-
   "++"                   { \p s -> PT p TokenConcatOp}
   ","                    { \p s -> PT p TokenComma}
 
+
   --Aggregation
   groupBy                { \p s -> PT p TokenGroupBy}
   sum                    { \p s -> PT p TokenSum}
@@ -46,32 +56,39 @@ tokens :-
   concat                 { \p s -> PT p TokenConcat}
   concatDist             { \p s -> PT p TokenConcatDist}
 
-  
-  
+ 
   --Primitives
   $digit+                { \p s -> PT p (TokenInt (read s)) }
   \"[^\"]*\"             { \p s -> PT p (TokenString (init (tail s))) }
-  
- 
+
+
 
 
 
 {
 data PosnToken = PT AlexPosn Token deriving (Eq, Show)
 
-data Token = 
+data Token =
   -- Keywords
-    TokenFrom  
+    TokenFrom
   | TokenTo
-  | TokenDo 
-  | TokenSelect 
+  | TokenDo
+  | TokenSelect
   | TokenFilter
-  | TokenLeftMerge 
+  | TokenLeftMerge
   | TokenRaw
-  
+  | TokenRename
+  | TokenDrop
+  | TokenSort
+  | TokenAddColumn
+  | TokenAppendRow
+  | TokenAsc
+  | TokenDesc
+
   -- Operators and symbols
-  | TokenPipe 
-  | TokenEquals 
+  | TokenPipe
+  | TokenEquals
+  | TokenNotEquals
   | TokenNotEquals 
   | TokenGreaterThan
   | TokenLessThan
@@ -81,7 +98,8 @@ data Token =
   | TokenAnd
   | TokenOr
   | TokenConcatOp
-  | TokenComma 
+  | TokenComma
+
 
 
   --Aggregation
@@ -97,7 +115,7 @@ data Token =
   --Primitives
   | TokenString String
   | TokenInt Int
-  
+
   deriving (Eq, Show)
 
 

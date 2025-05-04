@@ -1,5 +1,5 @@
 {
-module Parser (parse, Query(..), FromClause(..), Operation(..), Condition(..), AggregateFunc(..), Condition) where
+module Parser (parse, Query(..), FromClause(..), Operation(..), Condition(..), AggregateFunc(..), Condition(..), SortOrder(..)) where
 
 import Lexer
 }
@@ -9,6 +9,7 @@ import Lexer
 %error { parseError }
 
 %token
+
   from        { PT _ TokenFrom}
   to          { PT _ TokenTo}
   do          { PT _ TokenDo}
@@ -16,6 +17,13 @@ import Lexer
   select      { PT _ TokenSelect}
   filter      { PT _ TokenFilter}
   leftMerge   { PT _ TokenLeftMerge}
+  drop        { PT _ TokenDrop }
+  rename      { PT _ TokenRename }
+  sort        { PT _ TokenSort }
+  asc         { PT _ TokenAsc }
+  desc        { PT _ TokenDesc }
+  addColumn   { PT _ TokenAddColumn }
+  appendRow   { PT _ TokenAppendRow }
   '->'         { PT _ TokenPipe}
   '=='         { PT _ TokenEquals}
   '!='        { PT _ TokenNotEquals}
@@ -39,10 +47,11 @@ import Lexer
   concat     { PT _ TokenConcat }
   concatDist { PT _ TokenConcatDist }
 
-
 %%
+
 -- Main query structure
 Query : FromClause ToClause do OperationList  { Query $1 $2 $4 }
+
 
 --From clause, can be a single file or a pair of files
 FromClause : from string                { From $2 True}
@@ -50,23 +59,28 @@ FromClause : from string                { From $2 True}
            | from string ',' string     {FromPair $2 $4 True}
            | from string ',' string raw {FromPair $2 $4 False}
 
+
 -- Optional To clause
-ToClause : {- empty -}    { Nothing }
-         | to string      { Just $2 }
+ToClause : {- empty -}                    { Nothing }
+         | to string                      { Just $2 }
 
--- Operations section
-Operations : do OperationList  { $2 }
-
--- List of operations, possibly separated by pipes
-OperationList : Operation                   { [$1] }
+-- Operation list
+OperationList : Operation                 { [$1] }
               | Operation '->' OperationList { $1 : $3 }
 
--- Different types of operations
-Operation : select IntList   { Select $2 }
-          | filter Condition   { Filter $2 }
-          | leftMerge          { LeftMerge }
-          | groupBy int AggregateFunc { GroupBy $2 $3 }
 
+-- Operations
+Operation
+  : select IntList                        { Select $2 }
+  | filter Condition                      { Filter $2 }
+  | leftMerge                             { LeftMerge }
+  | drop IntList                          { Drop $2 }
+  | rename int string                     { Rename $2 $3 }
+  | sort int SortOrder                    { Sort $2 $3 }
+  | addColumn string string               { AddColumn $2 $3 }
+  | appendRow StringList                  { AppendRow $2 }
+  | groupBy int AggregateFunc             { GroupBy $2 $3 }
+  
 
 AggregateFunc : sum   { Sum }
               | count { Count }
@@ -76,9 +90,18 @@ AggregateFunc : sum   { Sum }
               | concat { Concat}
               | concatDist {ConcatDist}
 
--- Integer list for column indices
-IntList : int               { [$1] }
-        | int ',' IntList   { $1 : $3 }
+
+-- Integer list
+IntList : int                             { [$1] }
+        | int ',' IntList                 { $1 : $3 }
+
+-- String list
+StringList : string                       { [$1] }
+           | string ',' StringList        { $1 : $3 }
+
+-- Sort direction
+SortOrder : asc                           { Asc }
+          | desc                          { Desc }
 
 -- Condition expressions
 Condition : int '==' string    { Equals $1 $3 }
@@ -92,6 +115,7 @@ Condition : int '==' string    { Equals $1 $3 }
           | Condition '||' Condition  { Or $1 $3 }
 
 {
+-- === AST Definitions ===
 data Query = Query FromClause (Maybe String) [Operation]
   deriving (Show, Eq)
 
@@ -99,6 +123,7 @@ data Query = Query FromClause (Maybe String) [Operation]
 data FromClause = From String Bool
                 | FromPair String String Bool
                 deriving (Show, Eq)
+
 
 data Condition
   = Equals Int String
@@ -112,10 +137,18 @@ data Condition
   | Or Condition Condition
   deriving (Show, Eq)
 
+data SortOrder = Asc | Desc
+  deriving (Show, Eq)
+
 data Operation
   = Select [Int]
   | Filter Condition
   | LeftMerge
+  | Drop [Int]
+  | Rename Int String
+  | Sort Int SortOrder
+  | AddColumn String String
+  | AppendRow [String]
   | GroupBy Int AggregateFunc
   deriving (Show, Eq)
 
