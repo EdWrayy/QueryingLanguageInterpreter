@@ -23,6 +23,8 @@ import Lexer
   drop        { PT _ TokenDrop }
   rename      { PT _ TokenRename }
   sort        { PT _ TokenSort }
+  set        { PT _ TokenSet }
+  map        { PT _ TokenMap }
   asc         { PT _ TokenAsc }
   desc        { PT _ TokenDesc }
   addColumn   { PT _ TokenAddColumn }
@@ -83,6 +85,8 @@ Operation
   | drop IntList                          { Drop $2 }
   | rename int string                     { Rename $2 $3 }
   | sort int SortOrder                    { Sort $2 $3 }
+  | set int int string                    { Set $2 $3 $4 }
+  | map int string                        { Map $2 $3 }
   | addColumn string string               { AddColumn $2 $3 }
   | appendRow StringList                  { AppendRow $2 }
   | groupBy int AggregateFunc             { GroupBy $2 $3 }
@@ -160,6 +164,8 @@ data Operation
   | Drop [Int]
   | Rename Int String
   | Sort Int SortOrder
+  | Set Int Int String
+  | Map Int String
   | AddColumn String String
   | AppendRow [String]
   | GroupBy Int AggregateFunc

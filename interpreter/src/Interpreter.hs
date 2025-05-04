@@ -6,6 +6,8 @@ import qualified Data.List as L
 import qualified Data.Set as Set
 import Data.List (dropWhileEnd)
 import Data.Maybe
+import Text.Read (readMaybe)
+import Data.Char (toUpper, toLower, isSpace)
 import System.IO
 import System.Directory
 import Debug.Trace (trace)
@@ -126,8 +128,6 @@ applyOperation table (GroupBy colID aggFunc) = --Result will be a collapsed tabl
       aggregated = map (aggregateGroup colID aggFunc) grouped
       newHeader = [header !! colID, show aggFunc]
     in newHeader : aggregated
-
-
 -- Rename operation
 applyOperation table (Rename idx newName) =
   case table of
@@ -157,9 +157,54 @@ applyOperation table (AddColumn name defaultVal) =
       let newHeader = header ++ [name]
           newRows = map (++ [defaultVal]) rows
       in newHeader : newRows
-
 -- Append row operation
 applyOperation table (AppendRow values) = table ++ [values]
+--Set value operation
+applyOperation table (Set rowIdx colIdx val) =
+  let setRow rIdx row = if rIdx == rowIdx then updateAt colIdx val row else row
+  in if null table then [] else
+       let header = head table
+           rows = tail table
+           newRows = zipWith setRow [0..] rows
+       in header : newRows
+--Map operation
+applyOperation table (Map colIdx funcName) =
+  if null table then [] else
+    let header = head table
+        rows = tail table
+        func = parseMapFunc funcName
+        newRows = map (\row -> updateAt colIdx (func (row !! colIdx)) row) rows
+    in header : newRows
+
+
+parseMapFunc :: String -> (String -> String)
+parseMapFunc opStr = 
+  case words opStr of
+    ["upper"] -> map toUpper
+    ["lower"] -> map toLower
+    ["add", nStr] -> 
+      case readMaybe nStr :: Maybe Int of
+        Just n  -> intMapOp (+ n)
+        Nothing -> id
+    ["sub", nStr] ->
+      case readMaybe nStr :: Maybe Int of
+        Just n  -> intMapOp (\x -> x - n)
+        Nothing -> id
+    ["mul", nStr] ->
+      case readMaybe nStr :: Maybe Int of
+        Just n  -> intMapOp (* n)
+        Nothing -> id
+    ["div", nStr] ->
+      case readMaybe nStr :: Maybe Int of
+        Just 0  -> id  -- avoid div by zero
+        Just n  -> intMapOp (`div` n)
+        Nothing -> id
+    _ -> id  -- fallback: do nothing
+
+intMapOp :: (Int -> Int) -> (String -> String)
+intMapOp f s = case readMaybe s of
+  Just x  -> show (f x)
+  Nothing -> s
 
 
 

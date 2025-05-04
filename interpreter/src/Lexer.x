@@ -29,6 +29,8 @@ tokens :-
   sort                   { \p s -> PT p TokenSort}
   addColumn              { \p s -> PT p TokenAddColumn}
   appendRow              { \p s -> PT p TokenAppendRow}
+  set                    { \p s -> PT p TokenSet }
+  map                    { \p s -> PT p TokenMap }
   asc                    { \p s -> PT p TokenAsc}
   desc                   { \p s -> PT p TokenDesc}
   raw                    { \p s -> PT p TokenRaw }
@@ -86,6 +88,8 @@ data Token =
   | TokenRename
   | TokenDrop
   | TokenSort
+  | TokenSet
+  | TokenMap
   | TokenAddColumn
   | TokenAppendRow
   | TokenAsc
