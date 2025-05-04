@@ -89,7 +89,6 @@ data Token =
   | TokenPipe
   | TokenEquals
   | TokenNotEquals
-  | TokenNotEquals 
   | TokenGreaterThan
   | TokenLessThan
   | TokenGreaterThanEquals

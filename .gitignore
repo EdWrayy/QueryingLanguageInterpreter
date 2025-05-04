@@ -7,3 +7,4 @@
 .stack-work/install/aarch64-osx/f07d5a32f332e5e5a8844dc7d3cdb0a85b736fb92eb5405f610c7c72c2ee0e65/9.8.4/lib/aarch64-osx-ghc-9.8.4/interpreter-0.1.0.0-QQzmHgNdAZLSZg7fOedQf/libHSinterpreter-0.1.0.0-QQzmHgNdAZLSZg7fOedQf.a
 .stack-work/stack.sqlite3
 interpreter/testOutput.csv
+interpreter/query.cql
