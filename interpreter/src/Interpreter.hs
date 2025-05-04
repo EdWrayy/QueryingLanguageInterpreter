@@ -50,7 +50,8 @@ interpret (Query fromClause outputFile operations) = case fromClause of
                 let mergedWithNoDuplicates = head merged : L.nubBy rowEquals (tail merged) -- tried to Remove duplicates here
                     width = length (head mergedWithNoDuplicates)  
                     withHeaders = if hasLabels then mergedWithNoDuplicates else (map show [0 .. width - 1]) : mergedWithNoDuplicates
-                    finalTable = foldl applyOperation withHeaders otherOps
+                    computedTable = foldl applyOperation withHeaders otherOps
+                    finalTable = if hasLabels then computedTable else tail computedTable
                 printTable finalTable
                 outputResult outputFile finalTable
             [] -> do
