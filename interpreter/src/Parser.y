@@ -1,5 +1,5 @@
 {
-module Parser where
+module Parser (parse, Query(..), FromClause(..), Operation(..), Condition(..), SortOrder(..)) where
 
 import Lexer
 }
