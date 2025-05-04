@@ -20,6 +20,9 @@ tokens :-
   select                 { \p s -> PT p TokenSelect}
   filter                 { \p s -> PT p TokenFilter}
   leftMerge              { \p s -> PT p TokenLeftMerge}
+  rightMerge             { \p s -> PT p TokenRightMerge}
+  innerMerge             { \p s -> PT p TokenInnerMerge}
+  outerMerge             { \p s -> PT p TokenOuterMerge}
 
   rename                 { \p s -> PT p TokenRename}
   drop                   { \p s -> PT p TokenDrop}
@@ -76,6 +79,9 @@ data Token =
   | TokenSelect
   | TokenFilter
   | TokenLeftMerge
+  | TokenRightMerge
+  | TokenInnerMerge
+  | TokenOuterMerge 
   | TokenRaw
   | TokenRename
   | TokenDrop

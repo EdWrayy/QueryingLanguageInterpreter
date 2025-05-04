@@ -3,9 +3,12 @@ module Interpreter where
 import Parser
 import qualified Data.Map as M
 import qualified Data.List as L
+import qualified Data.Set as Set
+import Data.List (dropWhileEnd)
 import Data.Maybe
 import System.IO
 import System.Directory
+import Debug.Trace (trace)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Csv as Csv
 import qualified Data.Vector as V
@@ -14,6 +17,7 @@ import Data.Csv (encodeDefaultOrderedByName)
 
 -- A table is a list of rows, each row is a list of strings
 type Table = [[String]]
+type Row = [String]
 
 --Main interpret function
 interpret :: Query -> IO ()
@@ -35,24 +39,44 @@ interpret (Query fromClause outputFile operations) = case fromClause of
 
     -- Case for two files (FromPair)
     FromPair file1 file2 hasLabels -> do
-      table1 <- loadCSV file1
-      table2 <- loadCSV file2
+        let (mergeOps, otherOps) = L.partition isMergeOp operations
+        case mergeOps of 
+            [mergeOp] -> do
+                table1 <- loadCSV file1
+                table2 <- loadCSV file2
+                merged <- applyMergeOperation mergeOp table1 table2
+                let mergedWithNoDuplicates = head merged : L.nubBy rowEquals (tail merged) -- tried to Remove duplicates here
+                    width = length (head mergedWithNoDuplicates)  
+                    withHeaders = if hasLabels then mergedWithNoDuplicates else (map show [0 .. width - 1]) : mergedWithNoDuplicates
+                    finalTable = foldl applyOperation withHeaders otherOps
+                printTable finalTable
+                outputResult outputFile finalTable
+            [] -> do
+                putStrLn "Error: No merge operation provided for two tables"
+                return ()
+            _ -> do
+                putStrLn "Error: More than one merge operation specified"
+                return ()
 
-      let (table1WithHeaders, table2WithHeaders) = if hasLabels
-          then (table1, table2)
-          else
-            let width1 = length (head table1)
-                width2 = length (head table2)
-                t1h = (map show [0 .. width1 - 1]) : table1
-                t2h = (map show [0 .. width2 - 1]) : table2
-            in (t1h, t2h)
 
-      let computedTable = foldl (applyOp2 table2WithHeaders) table1WithHeaders operations
-      let finalTable = if hasLabels then computedTable else tail computedTable
-      printTable finalTable
-      outputResult outputFile finalTable
+--identifies which merge operation to use
+applyMergeOperation :: Operation -> Table -> Table -> IO Table
+applyMergeOperation (InnerMerge cond) table1 table2 = return $ innerMerge cond table1 table2
+applyMergeOperation (LeftMerge cond) table1 table2 = return $ leftMerge cond table1 table2
+applyMergeOperation (RightMerge cond) table1 table2 = return $ rightMerge cond table1 table2
+applyMergeOperation (OuterMerge cond) table1 table2 = return $ outerMerge cond table1 table2
+applyMergeOperation _ _ _ = do
+    putStrLn "Error: Invalid merge operation"
+    return []
 
 
+--checks that merge given is a correct merge operation
+isMergeOp :: Operation -> Bool
+isMergeOp (InnerMerge _) = True
+isMergeOp (LeftMerge _) = True
+isMergeOp (RightMerge _) = True
+isMergeOp (OuterMerge _) = True
+isMergeOp _ = False
 
 -- Load a CSV file into a Table using cassava
 loadCSV :: String -> IO Table
@@ -137,10 +161,7 @@ applyOperation table (AddColumn name defaultVal) =
 -- Append row operation
 applyOperation table (AppendRow values) = table ++ [values]
 
--- Apply Operation when there are 2 files
-applyOp2 :: Table -> Table -> Operation -> Table
-applyOp2 secondary primary LeftMerge = leftMerge primary secondary
-applyOp2 _ primary op = applyOperation primary op
+
 
 -- Select only specified columns from a row
 selectColumns :: [Int] -> [String] -> [String]
@@ -258,23 +279,111 @@ removeTrailingNewline bs
   | BL.last bs == 10 = BL.init bs  -- 10 is ASCII for newline
   | otherwise = bs
 
--- Merge two rows: prefer p's value unless it's empty
-mergeRows :: [String] -> [String] -> [String]
-mergeRows p q = zipWith choose p q
-  where choose "" qVal = qVal
-        choose pVal _  = pVal
 
--- Perform left merge based on the first column - could generalise it later
-leftMerge :: Table -> Table -> Table
-leftMerge p q =
-  [ p1 : mergeRows (tail pRow) (tail qRow)
-  | pRow@(p1:_) <- p
-  , qRow@(q1:_) <- q
-  , p1 == q1
-  ]
+--INNER MERGE: 2 input tables -> gives one result table
+innerMerge :: Condition -> Table -> Table -> Table
+--handles when there is a equals
+innerMerge cond@(EqualsCol _ _) fstTable sndTable = innerMerge' cond fstTable sndTable
+--handles case when there is notEquals
+innerMerge cond@(NotEqualsCol _ _) fstTable sndTable = innerMerge' cond fstTable sndTable
+--else error
+innerMerge _ _ _ = error "innerMerge currently supports only EqualsCol and NotEqualsCol"
+
+-- INNER MERGE: includes rows that match based on condition, excludes duplicates
+-- Returns rows that satisfy the condition between both tables
+-- Empty result if either table is empty
+-- Removes duplicate rows in the result -- I USED SQL JOINS FOR REFERENCE, TASK 5 WAS MORE LIKE INNERJOIN SO WE WOULD SAY USE INNER JOIN TO DO TASK 5
+innerMerge' :: Condition -> Table -> Table -> Table
+innerMerge' cond fstTable sndTable
+    | null fstTable || null sndTable = [] 
+    | otherwise =
+        let mergedRows = concatMap (joinWithScnd (tail sndTable)) (tail fstTable)
+            header = mergeRows (head fstTable) (head sndTable)
+        in header : remduplicate mergedRows
+  where
+    joinWithScnd :: [Row] -> Row -> [Row]
+    joinWithScnd sRows pRow =
+        [mergeRows pRow sRow | sRow <- sRows, checkCondition cond pRow sRow]
+
+    remduplicate :: [Row] -> [Row]                                        
+    remduplicate rows = Set.toList . Set.fromList $ map cleanUpRow rows
+
+    cleanUpRow :: Row -> Row
+    cleanUpRow = reverse . dropWhile (== "") . reverse       
+
+
+--LEFT MERGE:  keeps all rows from P and merges matching rows from Q.
+leftMerge :: Condition -> Table -> Table -> Table
+leftMerge cond fstTable sndTable
+    | null fstTable = []
+    | otherwise =
+        let pRows = tail fstTable
+            sRows = tail sndTable
+            merged = concatMap (processLeftMergeRow sRows cond) pRows
+            header = mergeRows (head fstTable) (head sndTable)
+        in header : remduplicate merged
+  where
+    processLeftMergeRow :: [Row] -> Condition -> Row -> [Row]
+    processLeftMergeRow sRows cond pRow =
+        let matches = filter (checkCondition cond pRow) sRows
+        in if null matches
+           then [mergeRows pRow []]
+           else map (mergeRows pRow) matches
+
+    remduplicate :: [Row] -> [Row]
+    remduplicate rows = Set.toList . Set.fromList $ map cleanUpRow rows
+
+    cleanUpRow :: Row -> Row
+    cleanUpRow = reverse . dropWhile (== "") . reverse
+
+
+--RIGHT MERGE: keeps all rows from Q and merges matching rows from P
+rightMerge :: Condition -> Table -> Table -> Table
+rightMerge cond fstTable sndTable =
+    leftMerge (reverseCondition cond) sndTable fstTable
+  where
+    reverseCondition :: Condition -> Condition
+    reverseCondition (EqualsCol i j) = EqualsCol j i
+    reverseCondition (NotEqualsCol i j) = NotEqualsCol j i
+    reverseCondition other = other
+
+
+--OUTER MERGE: includes all rows from both P and Q, filling missing values from the other table.
+outerMerge :: Condition -> Table -> Table -> Table
+outerMerge cond fstTable sndTable
+    | null fstTable = sndTable
+    | null sndTable = fstTable
+    | otherwise =
+        let leftResults = tail $ leftMerge cond fstTable sndTable  -- exclude header
+            rightResults = tail $ rightMerge cond fstTable sndTable  -- exclude header
+            allMerged = leftResults ++ rightResults
+            header = mergeRows (head fstTable) (head sndTable)
+        in header : remduplicate allMerged
+  where
+    remduplicate :: [Row] -> [Row]
+    remduplicate rows = Set.toList . Set.fromList $ map cleanUpRow rows
+
+    cleanUpRow :: Row -> Row
+    cleanUpRow = reverse . dropWhile (== "") . reverse
+
+
+-- Helper to check if rows are equal (for filtering duplicates) - THERE ARE STILL DUPS
+rowEquals :: Row -> Row -> Bool
+rowEquals row1 row2 =
+    length row1 == length row2 && and (zipWith (==) row1 row2)
+
+
+-- Row merging function that takes values from primary row unless empty
+mergeRows :: Row -> Row -> Row
+mergeRows pRow sRow =
+    let maxLen = max (length pRow) (length sRow)
+        pPadded = pRow ++ replicate (maxLen - length pRow) ""
+        sPadded = sRow ++ replicate (maxLen - length sRow) ""
+    in zipWith (\p s -> if p == "" then s else p) pPadded sPadded
+
+
 
  -- Helper Functions
-
 updateAt :: Int -> a -> [a] -> [a]
 updateAt idx val xs = take idx xs ++ [val] ++ drop (idx + 1) xs
 
@@ -288,3 +397,8 @@ compareRows idx Desc = \r1 r2 -> compare (safeIndex idx r2) (safeIndex idx r1)
 safeIndex :: Int -> [a] -> a
 safeIndex i xs = if i < length xs then xs !! i else error "Index out of bounds"
 
+--Used for checking column equality in merge operations
+checkCondition (EqualsCol i j) row1 row2 = 
+    i < length row1 && j < length row2 && (row1 !! i) == (row2 !! j)
+checkCondition (NotEqualsCol i j) row1 row2 = 
+    i < length row1 && j < length row2 && (row1 !! i) /= (row2 !! j)

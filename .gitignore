@@ -8,3 +8,7 @@
 .stack-work/stack.sqlite3
 interpreter/testOutput.csv
 interpreter/query.cql
+.stack-work/stack.sqlite3
+interpreter/employees2.csv
+interpreter/testy.csv
+interpreter/query.cql
