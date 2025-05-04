@@ -243,6 +243,10 @@ evaluateCondition _ (Or cond1 cond2) row =
   evaluateCondition row cond1 row || evaluateCondition row cond2 row
 evaluateCondition _ (Not cond) row =
   not $ evaluateCondition row cond row
+evaluateCondition _ (EqualsCol i j) row =
+  i < length row && j < length row && (row !! i == row !! j)
+evaluateCondition _ (NotEqualsCol i j) row =
+  i < length row && j < length row && (row !! i /= row !! j)
 
 
 
