@@ -1,1 +1,2 @@
-from "P.csv", "Q.csv" do leftMerge 
+from "P.csv", "Q.csv" to "output.csv"
+do leftMerge 

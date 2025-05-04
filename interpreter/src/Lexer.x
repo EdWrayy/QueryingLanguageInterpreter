@@ -20,12 +20,32 @@ tokens :-
   select                 { \p s -> PT p TokenSelect}
   filter                 { \p s -> PT p TokenFilter}
   leftMerge              { \p s -> PT p TokenLeftMerge}
+  raw                    { \p s -> PT p TokenRaw }
   
   -- Operators and symbols
-  "->"                    { \p s -> PT p TokenPipe}
-  "="                    { \p s -> PT p TokenEquals}
+  "->"                   { \p s -> PT p TokenPipe}
+  "=="                   { \p s -> PT p TokenEquals}
   "!="                   { \p s -> PT p TokenNotEquals}
+  ">"                    { \p s -> PT p TokenGreaterThan} 
+  "<"                    { \p s -> PT p TokenLessThan}
+  ">="                   { \p s -> PT p TokenGreaterThanEquals}
+  "<="                   { \p s -> PT p TokenLessThanEquals}
+  "!"                    { \p s -> PT p TokenNot}
+  "&&"                   { \p s -> PT p TokenAnd}
+  "||"                   { \p s -> PT p TokenOr}
+  "++"                   { \p s -> PT p TokenConcatOp}
   ","                    { \p s -> PT p TokenComma}
+
+  --Aggregation
+  groupBy                { \p s -> PT p TokenGroupBy}
+  sum                    { \p s -> PT p TokenSum}
+  avg                    { \p s -> PT p TokenAvg}
+  count                  { \p s -> PT p TokenCount}
+  max                    { \p s -> PT p TokenMax}
+  min                    { \p s -> PT p TokenMin}
+  concat                 { \p s -> PT p TokenConcat}
+  concatDist             { \p s -> PT p TokenConcatDist}
+
   
   
   --Primitives
@@ -47,12 +67,32 @@ data Token =
   | TokenSelect 
   | TokenFilter
   | TokenLeftMerge 
+  | TokenRaw
   
   -- Operators and symbols
   | TokenPipe 
   | TokenEquals 
   | TokenNotEquals 
+  | TokenGreaterThan
+  | TokenLessThan
+  | TokenGreaterThanEquals
+  | TokenLessThanEquals
+  | TokenNot
+  | TokenAnd
+  | TokenOr
+  | TokenConcatOp
   | TokenComma 
+
+
+  --Aggregation
+  | TokenGroupBy
+  | TokenSum
+  | TokenAvg
+  | TokenCount
+  | TokenMax
+  | TokenMin
+  | TokenConcat
+  | TokenConcatDist
 
   --Primitives
   | TokenString String
