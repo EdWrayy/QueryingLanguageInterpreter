@@ -339,98 +339,93 @@ innerMerge cond@(NotEqualsCol _ _) fstTable sndTable = innerMerge' cond fstTable
 --else error
 innerMerge _ _ _ = error "innerMerge currently supports only EqualsCol and NotEqualsCol"
 
--- INNER MERGE: includes rows that match based on condition, excludes duplicates
--- Returns rows that satisfy the condition between both tables
--- Empty result if either table is empty
--- Removes duplicate rows in the result -- I USED SQL JOINS FOR REFERENCE, TASK 5 WAS MORE LIKE INNERJOIN SO WE WOULD SAY USE INNER JOIN TO DO TASK 5
+
+-- Inner Merge, Only include rows where the condition is met. These rows include all the data from both tables
 innerMerge' :: Condition -> Table -> Table -> Table
-innerMerge' cond fstTable sndTable
-    | null fstTable || null sndTable = [] 
-    | otherwise =
-        let mergedRows = concatMap (joinWithScnd (tail sndTable)) (tail fstTable)
-            header = mergeRows (head fstTable) (head sndTable)
-        in header : remduplicate mergedRows
-  where
-    joinWithScnd :: [Row] -> Row -> [Row]
-    joinWithScnd sRows pRow =
-        [mergeRows pRow sRow | sRow <- sRows, checkCondition cond pRow sRow]
-
-    remduplicate :: [Row] -> [Row]                                        
-    remduplicate rows = Set.toList . Set.fromList $ map cleanUpRow rows
-
-    cleanUpRow :: Row -> Row
-    cleanUpRow = reverse . dropWhile (== "") . reverse       
+innerMerge' cond fstTable sndTable =
+  let newHeader = head fstTable ++  head sndTable
+      fstRows = tail fstTable
+      sndRows = tail sndTable
+      mergedRows = mapMaybe (mergeIfMatch cond sndRows) fstRows
+  in newHeader : mergedRows 
 
 
---LEFT MERGE:  keeps all rows from P and merges matching rows from Q.
+-- Left Merge, include all rows from the first table and only add data from the second table where the condition is met
 leftMerge :: Condition -> Table -> Table -> Table
-leftMerge cond fstTable sndTable
-    | null fstTable = []
-    | otherwise =
-        let pRows = tail fstTable
-            sRows = tail sndTable
-            merged = concatMap (processLeftMergeRow sRows cond) pRows
-            header = mergeRows (head fstTable) (head sndTable)
-        in header : remduplicate merged
-  where
-    processLeftMergeRow :: [Row] -> Condition -> Row -> [Row]
-    processLeftMergeRow sRows cond pRow =
-        let matches = filter (checkCondition cond pRow) sRows
-        in if null matches
-           then [mergeRows pRow []]
-           else map (mergeRows pRow) matches
+leftMerge _    [] _  = []              
+leftMerge _    _  [] = []              
+leftMerge cond fstTable sndTable =
+  let newHeader = head fstTable ++ head sndTable
+      fstRows   = tail fstTable
+      sndRows   = tail sndTable
+      blank     = blankRow (head sndTable)   
 
-    remduplicate :: [Row] -> [Row]
-    remduplicate rows = Set.toList . Set.fromList $ map cleanUpRow rows
+      -- either concatenate with match, or pad with blanks
+      mergeOrPad :: Row -> Row
+      mergeOrPad r1 =
+        case mergeIfMatch cond sndRows r1 of
+          Just merged -> merged
+          Nothing     -> r1 ++ blank
 
-    cleanUpRow :: Row -> Row
-    cleanUpRow = reverse . dropWhile (== "") . reverse
+      mergedRows = map mergeOrPad fstRows
+  in newHeader : mergedRows
 
 
---RIGHT MERGE: keeps all rows from Q and merges matching rows from P
-rightMerge :: Condition -> Table -> Table -> Table
+-- Right Merge, include all rows from the second table and only add data from the first table where the condition is met
+rightMerge:: Condition -> Table -> Table -> Table
+rightMerge _    [] _  = []              
+rightMerge _    _  [] = []            
 rightMerge cond fstTable sndTable =
-    leftMerge (reverseCondition cond) sndTable fstTable
-  where
-    reverseCondition :: Condition -> Condition
-    reverseCondition (EqualsCol i j) = EqualsCol j i
-    reverseCondition (NotEqualsCol i j) = NotEqualsCol j i
-    reverseCondition other = other
+  let newHeader = head fstTable ++ head sndTable
+      fstRows   = tail fstTable
+      sndRows   = tail sndTable
+      blankLeft = blankRow (head fstTable)  
 
+      -- for each right-table row, find a match on the left
+      mergeOrPad :: Row -> Row
+      mergeOrPad r2 =
+        case L.find (\r1 -> checkCondition cond r1 r2) fstRows of
+          Just r1 -> r1 ++ r2            
+          Nothing -> blankLeft ++ r2     
 
---OUTER MERGE: includes all rows from both P and Q, filling missing values from the other table.
+      mergedRows = map mergeOrPad sndRows
+  in newHeader : mergedRows
+
+-- Outer Merge, include all rows from both tables and fill in blanks where the condition is not met
 outerMerge :: Condition -> Table -> Table -> Table
-outerMerge cond fstTable sndTable
-    | null fstTable = sndTable
-    | null sndTable = fstTable
-    | otherwise =
-        let leftResults = tail $ leftMerge cond fstTable sndTable  -- exclude header
-            rightResults = tail $ rightMerge cond fstTable sndTable  -- exclude header
-            allMerged = leftResults ++ rightResults
-            header = mergeRows (head fstTable) (head sndTable)
-        in header : remduplicate allMerged
-  where
-    remduplicate :: [Row] -> [Row]
-    remduplicate rows = Set.toList . Set.fromList $ map cleanUpRow rows
+outerMerge _    [] t2 = t2                 -- degenerate cases
+outerMerge _    t1 [] = t1
+outerMerge cond fstTable sndTable =
+  let header        = head fstTable ++ head sndTable
 
-    cleanUpRow :: Row -> Row
-    cleanUpRow = reverse . dropWhile (== "") . reverse
+      -- run the two directional merges (they already have headers)
+      leftResult    = tail (leftMerge  cond fstTable sndTable)
+      rightResult   = tail (rightMerge cond fstTable sndTable)
 
+      mergedRows    = leftResult ++ rightResult
 
--- Helper to check if rows are equal (for filtering duplicates) - THERE ARE STILL DUPS
+      -- de-duplicate while preserving order
+      dedupRows     = L.nubBy rowEquals mergedRows
+  in  header : dedupRows
+
 rowEquals :: Row -> Row -> Bool
-rowEquals row1 row2 =
-    length row1 == length row2 && and (zipWith (==) row1 row2)
+rowEquals = (==)          -- rows are just equal-length String lists
 
 
--- Row merging function that takes values from primary row unless empty
-mergeRows :: Row -> Row -> Row
-mergeRows pRow sRow =
-    let maxLen = max (length pRow) (length sRow)
-        pPadded = pRow ++ replicate (maxLen - length pRow) ""
-        sPadded = sRow ++ replicate (maxLen - length sRow) ""
-    in zipWith (\p s -> if p == "" then s else p) pPadded sPadded
+--Finds the first match from the second table that matches the condition with the first table
+mergeIfMatch :: Condition -> [Row] -> Row -> Maybe Row
+mergeIfMatch cond sndRows r1 =
+  case L.find (checkCondition cond r1) sndRows of
+    Just r2 -> Just (r1 ++ r2)   
+    Nothing -> Nothing           
+          
 
+-- Helper for generating empty cells
+blankRow :: Row -> Row
+blankRow template = replicate (length template) ""
+
+deduplicate :: [Row] -> [Row]
+deduplicate = Set.toList . Set.fromList
 
 
  -- Helper Functions
@@ -448,6 +443,7 @@ safeIndex :: Int -> [a] -> a
 safeIndex i xs = if i < length xs then xs !! i else error "Index out of bounds"
 
 --Used for checking column equality in merge operations
+checkCondition :: Eq a => Condition -> [a] -> [a] -> Bool
 checkCondition (EqualsCol i j) row1 row2 = 
     i < length row1 && j < length row2 && (row1 !! i) == (row2 !! j)
 checkCondition (NotEqualsCol i j) row1 row2 = 
