@@ -20,12 +20,17 @@ tokens :-
   select                 { \p s -> PT p TokenSelect}
   filter                 { \p s -> PT p TokenFilter}
   leftMerge              { \p s -> PT p TokenLeftMerge}
+  rightMerge             { \p s -> PT p TokenRightMerge}
+  innerMerge             { \p s -> PT p TokenInnerMerge}
+  outerMerge             { \p s -> PT p TokenOuterMerge}
 
   rename                 { \p s -> PT p TokenRename}
   drop                   { \p s -> PT p TokenDrop}
   sort                   { \p s -> PT p TokenSort}
   addColumn              { \p s -> PT p TokenAddColumn}
   appendRow              { \p s -> PT p TokenAppendRow}
+  set                    { \p s -> PT p TokenSet }
+  map                    { \p s -> PT p TokenMap }
   asc                    { \p s -> PT p TokenAsc}
   desc                   { \p s -> PT p TokenDesc}
   raw                    { \p s -> PT p TokenRaw }
@@ -76,10 +81,15 @@ data Token =
   | TokenSelect
   | TokenFilter
   | TokenLeftMerge
+  | TokenRightMerge
+  | TokenInnerMerge
+  | TokenOuterMerge 
   | TokenRaw
   | TokenRename
   | TokenDrop
   | TokenSort
+  | TokenSet
+  | TokenMap
   | TokenAddColumn
   | TokenAppendRow
   | TokenAsc

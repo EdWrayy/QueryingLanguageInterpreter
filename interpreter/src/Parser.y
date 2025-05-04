@@ -17,9 +17,14 @@ import Lexer
   select      { PT _ TokenSelect}
   filter      { PT _ TokenFilter}
   leftMerge   { PT _ TokenLeftMerge}
+  rightMerge   {PT _ TokenRightMerge}
+  innerMerge   {PT _ TokenInnerMerge}
+  outerMerge   {PT _ TokenOuterMerge}
   drop        { PT _ TokenDrop }
   rename      { PT _ TokenRename }
   sort        { PT _ TokenSort }
+  set        { PT _ TokenSet }
+  map        { PT _ TokenMap }
   asc         { PT _ TokenAsc }
   desc        { PT _ TokenDesc }
   addColumn   { PT _ TokenAddColumn }
@@ -73,10 +78,15 @@ OperationList : Operation                 { [$1] }
 Operation
   : select IntList                        { Select $2 }
   | filter Condition                      { Filter $2 }
-  | leftMerge                             { LeftMerge }
+  | leftMerge Condition                   { LeftMerge $2}
+  | rightMerge Condition                  { RightMerge $2 }
+  | innerMerge Condition                  { InnerMerge $2 }
+  | outerMerge Condition                  { OuterMerge $2 }
   | drop IntList                          { Drop $2 }
   | rename int string                     { Rename $2 $3 }
   | sort int SortOrder                    { Sort $2 $3 }
+  | set int int string                    { Set $2 $3 $4 }
+  | map int string                        { Map $2 $3 }
   | addColumn string string               { AddColumn $2 $3 }
   | appendRow StringList                  { AppendRow $2 }
   | groupBy int AggregateFunc             { GroupBy $2 $3 }
@@ -113,6 +123,8 @@ Condition : int '==' string    { Equals $1 $3 }
           | '!' Condition             { Not $2 }
           | Condition '&&' Condition  { And $1 $3 }
           | Condition '||' Condition  { Or $1 $3 }
+          | int '==' int       { EqualsCol $1 $3} -- conditions for equal columns
+          | int '!=' int      { NotEqualsCol $1 $3 }
 
 {
 -- === AST Definitions ===
@@ -135,6 +147,8 @@ data Condition
   | Not Condition
   | And Condition Condition
   | Or Condition Condition
+  | EqualsCol Int Int
+  | NotEqualsCol Int Int
   deriving (Show, Eq)
 
 data SortOrder = Asc | Desc
@@ -143,10 +157,15 @@ data SortOrder = Asc | Desc
 data Operation
   = Select [Int]
   | Filter Condition
-  | LeftMerge
+  | LeftMerge Condition
+  | RightMerge Condition 
+  | InnerMerge Condition
+  | OuterMerge Condition
   | Drop [Int]
   | Rename Int String
   | Sort Int SortOrder
+  | Set Int Int String
+  | Map Int String
   | AddColumn String String
   | AppendRow [String]
   | GroupBy Int AggregateFunc
