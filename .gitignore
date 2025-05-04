@@ -2,3 +2,5 @@
 .stack-work/ghci/f2cae14c/cabal_macros.h
 /.stack-work
 /.vscode
+*.sqlite3
+/.stack-work
