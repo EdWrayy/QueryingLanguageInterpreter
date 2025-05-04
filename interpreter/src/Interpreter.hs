@@ -46,14 +46,35 @@ interpret (Query fromClause outputFile operations) = case fromClause of
             [mergeOp] -> do
                 table1 <- loadCSV file1
                 table2 <- loadCSV file2
-                merged <- applyMergeOperation mergeOp table1 table2
-                let mergedWithNoDuplicates = head merged : L.nubBy rowEquals (tail merged) -- tried to Remove duplicates here
-                    width = length (head mergedWithNoDuplicates)  
-                    withHeaders = if hasLabels then mergedWithNoDuplicates else (map show [0 .. width - 1]) : mergedWithNoDuplicates
-                    computedTable = foldl applyOperation withHeaders otherOps
-                    finalTable = if hasLabels then computedTable else tail computedTable
-                printTable finalTable
-                outputResult outputFile finalTable
+                
+                table1' <- if hasLabels 
+                            then return table1 
+                            else do
+                              let w = length (head table1)
+                              return $ (map show [0 .. w - 1]) : table1
+
+                table2' <- if hasLabels 
+                            then return table2 
+                            else do
+                              let w = length (head table2)
+                              return $ (map show [0 .. w - 1]) : table2
+
+                merged <- applyMergeOperation mergeOp table1' table2'  -- merged :: Table
+
+                merged' <- if hasLabels
+                            then return merged
+                            else (do
+                                  let mergedBody = tail merged
+                                      mergedWidth = length (head mergedBody)
+                                      newHeader = map show [0 .. mergedWidth - 1]
+                                  return (newHeader : mergedBody))
+                                  
+
+               
+                let computed = foldl applyOperation merged' otherOps
+                    final = if hasLabels then computed else tail computed
+                printTable final 
+                outputResult outputFile final 
             [] -> do
                 putStrLn "Error: No merge operation provided for two tables"
                 return ()
