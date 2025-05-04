@@ -1,2 +1,3 @@
-from "employees.csv" to "testOutput.csv" do
-filter 2 = "Engineering" -> select 1, 3 -> drop 1
+from "employees.csv" to "testy.csv" do
+filter !3 == "95000" && 3 > 90000
+

@@ -1,5 +1,5 @@
 {
-module Parser (parse, Query(..), FromClause(..), Operation(..), Condition(..), SortOrder(..)) where
+module Parser (parse, Query(..), FromClause(..), Operation(..), Condition(..), AggregateFunc(..), Condition(..), SortOrder(..)) where
 
 import Lexer
 }
@@ -9,12 +9,14 @@ import Lexer
 %error { parseError }
 
 %token
-  from        { PT _ TokenFrom }
-  to          { PT _ TokenTo }
-  do          { PT _ TokenDo }
-  select      { PT _ TokenSelect }
-  filter      { PT _ TokenFilter }
-  leftMerge   { PT _ TokenLeftMerge }
+
+  from        { PT _ TokenFrom}
+  to          { PT _ TokenTo}
+  do          { PT _ TokenDo}
+  raw         { PT _ TokenRaw}
+  select      { PT _ TokenSelect}
+  filter      { PT _ TokenFilter}
+  leftMerge   { PT _ TokenLeftMerge}
   drop        { PT _ TokenDrop }
   rename      { PT _ TokenRename }
   sort        { PT _ TokenSort }
@@ -22,21 +24,41 @@ import Lexer
   desc        { PT _ TokenDesc }
   addColumn   { PT _ TokenAddColumn }
   appendRow   { PT _ TokenAppendRow }
-  '->'        { PT _ TokenPipe }
-  '='         { PT _ TokenEquals }
-  '!='        { PT _ TokenNotEquals }
-  ','         { PT _ TokenComma }
+  '->'         { PT _ TokenPipe}
+  '=='         { PT _ TokenEquals}
+  '!='        { PT _ TokenNotEquals}
+  ','         { PT _ TokenComma}
+  '>'         { PT _ TokenGreaterThan }
+  '<'         { PT _ TokenLessThan }
+  '>='        { PT _ TokenGreaterThanEquals }
+  '<='        { PT _ TokenLessThanEquals }
+  '!'         { PT _ TokenNot }
+  '&&'        { PT _ TokenAnd }
+  '||'        { PT _ TokenOr }
+  '++'        { PT _ TokenConcatOp }
   string      { PT _ (TokenString $$) }
   int         { PT _ (TokenInt $$) }
+  groupBy    { PT _ TokenGroupBy }
+  sum        { PT _ TokenSum }
+  count      { PT _ TokenCount }
+  avg        { PT _ TokenAvg }
+  min        { PT _ TokenMin }
+  max        { PT _ TokenMax }
+  concat     { PT _ TokenConcat }
+  concatDist { PT _ TokenConcatDist }
 
 %%
 
 -- Main query structure
 Query : FromClause ToClause do OperationList  { Query $1 $2 $4 }
 
--- From clause
-FromClause : from string                   { From $2 }
-           | from string ',' string       { FromPair $2 $4 }
+
+--From clause, can be a single file or a pair of files
+FromClause : from string                { From $2 True}
+           | from string raw            { From $2 False }
+           | from string ',' string     {FromPair $2 $4 True}
+           | from string ',' string raw {FromPair $2 $4 False}
+
 
 -- Optional To clause
 ToClause : {- empty -}                    { Nothing }
@@ -45,6 +67,7 @@ ToClause : {- empty -}                    { Nothing }
 -- Operation list
 OperationList : Operation                 { [$1] }
               | Operation '->' OperationList { $1 : $3 }
+
 
 -- Operations
 Operation
@@ -56,6 +79,17 @@ Operation
   | sort int SortOrder                    { Sort $2 $3 }
   | addColumn string string               { AddColumn $2 $3 }
   | appendRow StringList                  { AppendRow $2 }
+  | groupBy int AggregateFunc             { GroupBy $2 $3 }
+  
+
+AggregateFunc : sum   { Sum }
+              | count { Count }
+              | avg   { Avg }
+              | min   { Min }
+              | max   { Max }
+              | concat { Concat}
+              | concatDist {ConcatDist}
+
 
 -- Integer list
 IntList : int                             { [$1] }
@@ -69,23 +103,38 @@ StringList : string                       { [$1] }
 SortOrder : asc                           { Asc }
           | desc                          { Desc }
 
--- Conditions
-Condition : int '=' string                { Equals $1 $3 }
-          | int '!=' string               { NotEquals $1 $3 }
+-- Condition expressions
+Condition : int '==' string    { Equals $1 $3 }
+          | int '!=' string   { NotEquals $1 $3 }
+          | int '>' int               { GreaterThan $1 $3 }
+          | int '<' int               { LessThan $1 $3 }
+          | int '>=' int              { GreaterThanEq $1 $3 }
+          | int '<=' int              { LessThanEq $1 $3 }
+          | '!' Condition             { Not $2 }
+          | Condition '&&' Condition  { And $1 $3 }
+          | Condition '||' Condition  { Or $1 $3 }
 
 {
 -- === AST Definitions ===
 data Query = Query FromClause (Maybe String) [Operation]
   deriving (Show, Eq)
 
-data FromClause
-  = From String
-  | FromPair String String
-  deriving (Show, Eq)
+
+data FromClause = From String Bool
+                | FromPair String String Bool
+                deriving (Show, Eq)
+
 
 data Condition
   = Equals Int String
   | NotEquals Int String
+  | GreaterThan Int Int
+  | LessThan Int Int
+  | GreaterThanEq Int Int
+  | LessThanEq Int Int
+  | Not Condition
+  | And Condition Condition
+  | Or Condition Condition
   deriving (Show, Eq)
 
 data SortOrder = Asc | Desc
@@ -100,6 +149,10 @@ data Operation
   | Sort Int SortOrder
   | AddColumn String String
   | AppendRow [String]
+  | GroupBy Int AggregateFunc
+  deriving (Show, Eq)
+
+data AggregateFunc = Sum | Count | Avg | Min | Max | Concat | ConcatDist  
   deriving (Show, Eq)
 
 -- === Error Handling ===
