@@ -20,6 +20,8 @@ import Lexer
   rightMerge   {PT _ TokenRightMerge}
   innerMerge   {PT _ TokenInnerMerge}
   outerMerge   {PT _ TokenOuterMerge}
+  cartesianProduct { PT _ TokenCartesianProduct }
+  coalesceColumns  { PT _ TokenCoalesceColumns }
   drop        { PT _ TokenDrop }
   rename      { PT _ TokenRename }
   sort        { PT _ TokenSort }
@@ -82,6 +84,8 @@ Operation
   | rightMerge Condition                  { RightMerge $2 }
   | innerMerge Condition                  { InnerMerge $2 }
   | outerMerge Condition                  { OuterMerge $2 }
+  | cartesianProduct                      { CartesianProduct }
+  | coalesceColumns int   { CoalesceColumns $2 }
   | drop IntList                          { Drop $2 }
   | rename int string                     { Rename $2 $3 }
   | sort int SortOrder                    { Sort $2 $3 }
@@ -161,6 +165,8 @@ data Operation
   | RightMerge Condition 
   | InnerMerge Condition
   | OuterMerge Condition
+  | CartesianProduct
+  | CoalesceColumns Int
   | Drop [Int]
   | Rename Int String
   | Sort Int SortOrder
