@@ -32,6 +32,7 @@ import Lexer
   desc        { PT _ TokenDesc }
   addColumn   { PT _ TokenAddColumn }
   appendRow   { PT _ TokenAppendRow }
+  removePadding { PT _ TokenRemovePadding }
   '->'         { PT _ TokenPipe}
   '=='         { PT _ TokenEquals}
   '!='        { PT _ TokenNotEquals}
@@ -87,6 +88,7 @@ Operation
   | map int string                        { Map $2 $3 }
   | addColumn string string               { AddColumn $2 $3 }
   | appendRow StringList                  { AppendRow $2 }
+  | removePadding                         { RemovePadding }
   | groupBy int AggregateFunc             { GroupBy $2 $3 }
   
 
@@ -156,6 +158,7 @@ data Operation
   | Map Int String
   | AddColumn String String
   | AppendRow [String]
+  | RemovePadding
   | GroupBy Int AggregateFunc
   deriving (Show, Eq)
 

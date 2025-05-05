@@ -32,6 +32,7 @@ tokens :-
   sortLex                { \p s -> PT p TokenSortLex}
   addColumn              { \p s -> PT p TokenAddColumn}
   appendRow              { \p s -> PT p TokenAppendRow}
+  removePadding          { \p s -> PT p TokenRemovePadding}
   set                    { \p s -> PT p TokenSet }
   map                    { \p s -> PT p TokenMap }
   asc                    { \p s -> PT p TokenAsc}
@@ -90,6 +91,7 @@ data Token =
   | TokenMap
   | TokenAddColumn
   | TokenAppendRow
+  | TokenRemovePadding
   | TokenAsc
   | TokenDesc
 

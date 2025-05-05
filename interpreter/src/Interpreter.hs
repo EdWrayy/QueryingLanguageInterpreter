@@ -208,6 +208,9 @@ applyOperation table SortLex =
   case table of
     [] -> []
     (header:rows) -> header : L.sort rows
+--Remove all trailing and leading spaces from the table
+applyOperation table RemovePadding =
+  map (map trim) table
 
 coalesceRow :: Int -> Row -> Row
 coalesceRow n row =
