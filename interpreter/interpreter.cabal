@@ -43,6 +43,7 @@ library
     , cassava
     , containers
     , directory
+    , split
     , vector
   default-language: Haskell2010
   build-tool-depends:
@@ -66,6 +67,7 @@ executable interpreter-exe
     , containers
     , directory
     , interpreter
+    , split
     , vector
   default-language: Haskell2010
 
@@ -87,5 +89,6 @@ test-suite interpreter-test
     , containers
     , directory
     , interpreter
+    , split
     , vector
   default-language: Haskell2010
