@@ -29,6 +29,7 @@ tokens :-
   rename                 { \p s -> PT p TokenRename}
   drop                   { \p s -> PT p TokenDrop}
   sort                   { \p s -> PT p TokenSort}
+  sortLex                { \p s -> PT p TokenSortLex}
   addColumn              { \p s -> PT p TokenAddColumn}
   appendRow              { \p s -> PT p TokenAppendRow}
   set                    { \p s -> PT p TokenSet }
@@ -41,11 +42,6 @@ tokens :-
   -- Operators and symbols
   "->"                   { \p s -> PT p TokenPipe}
   "=="                   { \p s -> PT p TokenEquals}
-  "!="                   { \p s -> PT p TokenNotEquals}
-  ">"                    { \p s -> PT p TokenGreaterThan} 
-  "<"                    { \p s -> PT p TokenLessThan}
-  ">="                   { \p s -> PT p TokenGreaterThanEquals}
-  "<="                   { \p s -> PT p TokenLessThanEquals}
   "!"                    { \p s -> PT p TokenNot}
   "&&"                   { \p s -> PT p TokenAnd}
   "||"                   { \p s -> PT p TokenOr}
@@ -55,17 +51,13 @@ tokens :-
 
   --Aggregation
   groupBy                { \p s -> PT p TokenGroupBy}
-  sum                    { \p s -> PT p TokenSum}
-  avg                    { \p s -> PT p TokenAvg}
   count                  { \p s -> PT p TokenCount}
-  max                    { \p s -> PT p TokenMax}
-  min                    { \p s -> PT p TokenMin}
   concat                 { \p s -> PT p TokenConcat}
   concatDist             { \p s -> PT p TokenConcatDist}
 
  
   --Primitives
-  $digit+                { \p s -> PT p (TokenInt (read s)) }
+  $digit+ { \p s -> PT p (TokenInt (read s)) }
   \"[^\"]*\"             { \p s -> PT p (TokenString (init (tail s))) }
 
 
@@ -92,6 +84,7 @@ data Token =
   | TokenRename
   | TokenDrop
   | TokenSort
+  | TokenSortLex
   | TokenSet
   | TokenMap
   | TokenAddColumn
@@ -117,11 +110,7 @@ data Token =
 
   --Aggregation
   | TokenGroupBy
-  | TokenSum
-  | TokenAvg
   | TokenCount
-  | TokenMax
-  | TokenMin
   | TokenConcat
   | TokenConcatDist
 

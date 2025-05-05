@@ -203,6 +203,11 @@ applyOperation table (CoalesceColumns n) =
         rows = tail table
         newRows = map (coalesceRow n) rows
     in header : newRows
+-- Sort the enitre table lexiographically
+applyOperation table SortLex =
+  case table of
+    [] -> []
+    (header:rows) -> header : L.sort rows
 
 coalesceRow :: Int -> Row -> Row
 coalesceRow n row =
@@ -221,31 +226,11 @@ parseMapFunc opStr =
   case words opStr of
     ["upper"] -> map toUpper
     ["lower"] -> map toLower
-    ["add", nStr] -> 
-      case readMaybe nStr :: Maybe Int of
-        Just n  -> intMapOp (+ n)
-        Nothing -> id
-    ["sub", nStr] ->
-      case readMaybe nStr :: Maybe Int of
-        Just n  -> intMapOp (\x -> x - n)
-        Nothing -> id
-    ["mul", nStr] ->
-      case readMaybe nStr :: Maybe Int of
-        Just n  -> intMapOp (* n)
-        Nothing -> id
-    ["div", nStr] ->
-      case readMaybe nStr :: Maybe Int of
-        Just 0  -> id  -- avoid div by zero
-        Just n  -> intMapOp (`div` n)
-        Nothing -> id
-    _ -> id  -- fallback: do nothing
-
-intMapOp :: (Int -> Int) -> (String -> String)
-intMapOp f s = case readMaybe s of
-  Just x  -> show (f x)
-  Nothing -> s
-
-
+    ["trim"] -> strip
+    ["length"] -> show . length
+    ["reverse"] -> reverse
+    "concat":rest   -> \s -> s ++ unwords rest
+    
 
 -- Select only specified columns from a row
 selectColumns :: [Int] -> [String] -> [String]
@@ -260,22 +245,6 @@ evaluateCondition _ (Equals colIdx value) row =
   (colIdx >= 0 && colIdx < length row) && (row !! colIdx == value)
 evaluateCondition _ (NotEquals colIdx value) row =
   (colIdx >= 0 && colIdx < length row) && (row !! colIdx /= value)
-evaluateCondition _ (LessThan colIdx val) row =
-  case parseDouble (row !! colIdx) of
-    Just x -> x < fromIntegral val
-    Nothing -> False
-evaluateCondition _ (GreaterThan colIdx val) row =
-  case parseDouble (row !! colIdx) of
-    Just x -> x > fromIntegral val
-    Nothing -> False
-evaluateCondition _ (LessThanEq colIdx val) row =
-  case parseDouble (row !! colIdx) of
-    Just x -> x <= fromIntegral val
-    Nothing -> False
-evaluateCondition _ (GreaterThanEq colIdx val) row =
-  case parseDouble (row !! colIdx) of
-    Just x -> x >= fromIntegral val
-    Nothing -> False
 evaluateCondition _ (And cond1 cond2) row =
   evaluateCondition row cond1 row && evaluateCondition row cond2 row
 evaluateCondition _ (Or cond1 cond2) row =
@@ -303,25 +272,9 @@ aggregateGroup groupColIdx aggFunc (groupKey, rows) =
       
     extractValues groupColIdx row = [row !! i | i <- [0..length row - 1], i /= groupColIdx]
       
-    result = case aggFunc of
-      Sum -> case mapMaybe parseDouble allValues of
-        [] -> "0"
-        nums -> show $ sum nums
-                 
-      Avg -> case mapMaybe parseDouble allValues of
-        [] -> "0"
-        nums -> show $ sum nums / fromIntegral (length nums)
-                 
+    result = case aggFunc of               
       Count -> show $ length rows
-                 
-      Min -> case allValues of
-        [] -> ""
-        vs -> minimum vs  -- Works for strings too (lexicographic order)
-                 
-      Max -> case allValues of
-        [] -> ""
-        vs -> maximum vs  -- Works for strings too (lexicographic order)
-                 
+                                  
       -- Additional string-specific aggregates
       Concat -> case allValues of
         [] -> ""
@@ -332,10 +285,6 @@ aggregateGroup groupColIdx aggFunc (groupKey, rows) =
         vs -> concat $ L.nub vs  -- Concatenate unique strings
     in [groupKey, result]
 
-parseDouble :: String -> Maybe Double
-parseDouble s = case reads s of
-  [(x, "")] -> Just x
-  _ -> Nothing
 
 
 
