@@ -42,6 +42,7 @@ tokens :-
   -- Operators and symbols
   "->"                   { \p s -> PT p TokenPipe}
   "=="                   { \p s -> PT p TokenEquals}
+  "!="                   { \p s -> PT p TokenNotEquals}
   "!"                    { \p s -> PT p TokenNot}
   "&&"                   { \p s -> PT p TokenAnd}
   "||"                   { \p s -> PT p TokenOr}
