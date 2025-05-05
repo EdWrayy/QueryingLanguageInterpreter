@@ -376,7 +376,8 @@ innerMerge' cond fstTable sndTable =
       fstRows = tail fstTable
       sndRows = tail sndTable
       mergedRows = concat [findAllMatches cond sndRows r1 | r1 <- fstRows]
-  in newHeader : mergedRows 
+  in removeWhiteSpaces (newHeader : mergedRows)
+
 
 
 -- Left Merge, include all rows from the first table and only add data from the second table where the condition is met
@@ -394,8 +395,10 @@ leftMerge cond fstTable sndTable =
       mergeOrPad r1 =
         let matches = findAllMatches cond sndRows r1
         in if null matches then [r1 ++ blank] else matches
+        
       mergedRows = concatMap mergeOrPad fstRows
-  in newHeader : mergedRows
+  in removeWhiteSpaces (newHeader : mergedRows)
+
 
 
 -- Right Merge, include all rows from the second table and only add data from the first table where the condition is met
@@ -414,8 +417,9 @@ rightMerge cond fstTable sndTable =
         let matches = [r1 ++ r2 | r1 <- fstRows, checkCondition cond r1 r2]
         in if null matches then [blankLeft ++ r2] else matches
 
+
       mergedRows = concatMap mergeOrPad sndRows
-  in newHeader : mergedRows
+  in removeWhiteSpaces (newHeader : mergedRows)
 
 -- Outer Merge, include all rows from both tables and fill in blanks where the condition is not met
 outerMerge :: Condition -> Table -> Table -> Table
@@ -432,7 +436,7 @@ outerMerge cond fstTable sndTable =
 
       -- de-duplicate while preserving order
       dedupRows     = L.nubBy rowEquals mergedRows
-  in  header : dedupRows
+  in removeWhiteSpaces (header : dedupRows)
 
 
 cartesianProduct :: Table -> Table -> Table
@@ -500,3 +504,10 @@ checkCondition (EqualsCol i j) row1 row2 =
     i < length row1 && j < length row2 && (row1 !! i) == (row2 !! j)
 checkCondition (NotEqualsCol i j) row1 row2 = 
     i < length row1 && j < length row2 && (row1 !! i) /= (row2 !! j)
+
+--remove white spaces 
+removeWhiteSpaces :: Table -> Table
+removeWhiteSpaces = map (map trim)
+
+trim :: String -> String
+trim = dropWhileEnd isSpace . dropWhile isSpace
