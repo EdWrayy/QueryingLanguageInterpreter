@@ -25,6 +25,7 @@ import Lexer
   drop        { PT _ TokenDrop }
   rename      { PT _ TokenRename }
   sort        { PT _ TokenSort }
+  sortLex   { PT _ TokenSortLex }
   set        { PT _ TokenSet }
   map        { PT _ TokenMap }
   asc         { PT _ TokenAsc }
@@ -35,10 +36,6 @@ import Lexer
   '=='         { PT _ TokenEquals}
   '!='        { PT _ TokenNotEquals}
   ','         { PT _ TokenComma}
-  '>'         { PT _ TokenGreaterThan }
-  '<'         { PT _ TokenLessThan }
-  '>='        { PT _ TokenGreaterThanEquals }
-  '<='        { PT _ TokenLessThanEquals }
   '!'         { PT _ TokenNot }
   '&&'        { PT _ TokenAnd }
   '||'        { PT _ TokenOr }
@@ -46,11 +43,7 @@ import Lexer
   string      { PT _ (TokenString $$) }
   int         { PT _ (TokenInt $$) }
   groupBy    { PT _ TokenGroupBy }
-  sum        { PT _ TokenSum }
   count      { PT _ TokenCount }
-  avg        { PT _ TokenAvg }
-  min        { PT _ TokenMin }
-  max        { PT _ TokenMax }
   concat     { PT _ TokenConcat }
   concatDist { PT _ TokenConcatDist }
 
@@ -89,6 +82,7 @@ Operation
   | drop IntList                          { Drop $2 }
   | rename int string                     { Rename $2 $3 }
   | sort int SortOrder                    { Sort $2 $3 }
+  | sortLex                               { SortLex}
   | set int int string                    { Set $2 $3 $4 }
   | map int string                        { Map $2 $3 }
   | addColumn string string               { AddColumn $2 $3 }
@@ -96,11 +90,7 @@ Operation
   | groupBy int AggregateFunc             { GroupBy $2 $3 }
   
 
-AggregateFunc : sum   { Sum }
-              | count { Count }
-              | avg   { Avg }
-              | min   { Min }
-              | max   { Max }
+AggregateFunc : count { Count }
               | concat { Concat}
               | concatDist {ConcatDist}
 
@@ -120,10 +110,6 @@ SortOrder : asc                           { Asc }
 -- Condition expressions
 Condition : int '==' string    { Equals $1 $3 }
           | int '!=' string   { NotEquals $1 $3 }
-          | int '>' int               { GreaterThan $1 $3 }
-          | int '<' int               { LessThan $1 $3 }
-          | int '>=' int              { GreaterThanEq $1 $3 }
-          | int '<=' int              { LessThanEq $1 $3 }
           | '!' Condition             { Not $2 }
           | Condition '&&' Condition  { And $1 $3 }
           | Condition '||' Condition  { Or $1 $3 }
@@ -135,7 +121,6 @@ Condition : int '==' string    { Equals $1 $3 }
 data Query = Query FromClause (Maybe String) [Operation]
   deriving (Show, Eq)
 
-
 data FromClause = From String Bool
                 | FromPair String String Bool
                 deriving (Show, Eq)
@@ -144,10 +129,6 @@ data FromClause = From String Bool
 data Condition
   = Equals Int String
   | NotEquals Int String
-  | GreaterThan Int Int
-  | LessThan Int Int
-  | GreaterThanEq Int Int
-  | LessThanEq Int Int
   | Not Condition
   | And Condition Condition
   | Or Condition Condition
@@ -170,6 +151,7 @@ data Operation
   | Drop [Int]
   | Rename Int String
   | Sort Int SortOrder
+  | SortLex
   | Set Int Int String
   | Map Int String
   | AddColumn String String
@@ -177,7 +159,7 @@ data Operation
   | GroupBy Int AggregateFunc
   deriving (Show, Eq)
 
-data AggregateFunc = Sum | Count | Avg | Min | Max | Concat | ConcatDist  
+data AggregateFunc = Count | Concat | ConcatDist  
   deriving (Show, Eq)
 
 -- === Error Handling ===
