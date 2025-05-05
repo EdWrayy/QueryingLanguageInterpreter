@@ -457,11 +457,27 @@ dropAtIndices :: [Int] -> [a] -> [a]
 dropAtIndices indices row = [x | (i, x) <- zip [0..] row, i `notElem` indices]
 
 compareRows :: Int -> SortOrder -> [String] -> [String] -> Ordering
-compareRows idx Asc  = \r1 r2 -> compare (safeIndex idx r1) (safeIndex idx r2)
-compareRows idx Desc = \r1 r2 -> compare (safeIndex idx r2) (safeIndex idx r1)
+compareRows idx Asc row1 row2 = compareValues idx row1 row2
+compareRows idx Desc row1 row2 = compareValues idx row2 row1
 
-safeIndex :: Int -> [a] -> a
-safeIndex i xs = if i < length xs then xs !! i else error "Index out of bounds"
+compareValues :: Int -> [String] -> [String] -> Ordering
+compareValues idx row1 row2 =
+    let v1 = safeIndex idx row1
+        v2 = safeIndex idx row2
+    in case (v1, v2) of
+        ("", _) -> LT
+        (_, "") -> GT
+        _ -> compareNumericValues v1 v2
+
+safeIndex :: Int -> [String] -> String
+safeIndex idx row = if idx < length row then row !! idx else ""
+
+-- Compares values as integers
+compareNumericValues :: String -> String -> Ordering
+compareNumericValues v1 v2 =
+  case (readMaybe v1 :: Maybe Int, readMaybe v2 :: Maybe Int) of
+    (Just n1, Just n2) -> compare n1 n2
+    _ -> compare v1 v2
 
 --Used for checking column equality in merge operations
 checkCondition :: Eq a => Condition -> [a] -> [a] -> Bool
