@@ -12,8 +12,9 @@ import System.IO
 import System.Directory
 import Debug.Trace (trace)
 import qualified Data.ByteString.Lazy as BL
-import qualified Data.Csv as Csv
+import qualified Data.Csv as Csv  
 import qualified Data.Vector as V
+import Data.List.Split (splitOn)
 import Data.Csv (encodeDefaultOrderedByName)
 
 
@@ -89,6 +90,7 @@ applyMergeOperation (InnerMerge cond) table1 table2 = return $ innerMerge cond t
 applyMergeOperation (LeftMerge cond) table1 table2 = return $ leftMerge cond table1 table2
 applyMergeOperation (RightMerge cond) table1 table2 = return $ rightMerge cond table1 table2
 applyMergeOperation (OuterMerge cond) table1 table2 = return $ outerMerge cond table1 table2
+applyMergeOperation (CartesianProduct) table1 table2 = return $ cartesianProduct table1 table2
 applyMergeOperation _ _ _ = do
     putStrLn "Error: Invalid merge operation"
     return []
@@ -100,6 +102,7 @@ isMergeOp (InnerMerge _) = True
 isMergeOp (LeftMerge _) = True
 isMergeOp (RightMerge _) = True
 isMergeOp (OuterMerge _) = True
+isMergeOp (CartesianProduct) = True
 isMergeOp _ = False
 
 -- Load a CSV file into a Table using cassava
@@ -112,23 +115,18 @@ loadCSV fileName = do
       putStrLn $ "File " ++ fileName ++ " not found. Query will be done with empty table."
       return []
     else do
-      csvData <- BL.readFile fileName
-      case Csv.decode Csv.NoHeader csvData of
-        Left err -> do
-          putStrLn $ "Error parsing CSV: " ++ err
-          return []
-        Right v -> 
-          let table = map V.toList (V.toList v)
-          in if validateUniformArity table
-              then return table
-              else do
-                putStrLn $ "Error: File " ++ fileName ++ " has non-uniform arity."
-                return []
+      contents <- readFile fileName
+      let rawLines = lines contents
+          parsedRows = map (splitOn ",") rawLines
+      case parsedRows of
+        [] -> return []  -- empty file: valid
+        (r:rs) ->
+          if all (\row -> length row == length r) rs
+            then return parsedRows
+            else do
+              putStrLn $ "Error: File " ++ fileName ++ " has non-uniform arity."
+              return []
 
---Check that each row has the same number of columns
-validateUniformArity :: Table -> Bool
-validateUniformArity [] = True
-validateUniformArity (r:rs) = all (\row -> length row == length r) rs
 
 -- Apply operation to table
 applyOperation :: Table -> Operation -> Table
@@ -197,6 +195,25 @@ applyOperation table (Map colIdx funcName) =
         func = parseMapFunc funcName
         newRows = map (\row -> updateAt colIdx (func (row !! colIdx)) row) rows
     in header : newRows
+-- Coalesce column operation
+applyOperation table (CoalesceColumns n) =
+  if null table then []
+  else
+    let header = take n (head table)  
+        rows = tail table
+        newRows = map (coalesceRow n) rows
+    in header : newRows
+
+coalesceRow :: Int -> Row -> Row
+coalesceRow n row =
+  let (left, right) = splitAt n row
+  in zipWith prefer left right
+
+prefer :: String -> String -> String
+prefer a b = let a' = strip a in if null a' then strip b else a'
+
+strip :: String -> String
+strip = dropWhileEnd isSpace . dropWhile isSpace
 
 
 parseMapFunc :: String -> (String -> String)
@@ -334,21 +351,12 @@ outputResult Nothing table = printTable table  -- Output to console if no output
 outputResult (Just fileName) table = writeTableToCSV fileName table
 
 
--- Write table to CSV using cassava
 writeTableToCSV :: String -> Table -> IO ()
 writeTableToCSV fileName table = do
     putStrLn $ "Writing output to file: " ++ fileName
-    -- Convert Table to Vector of Vector String for cassava
-    let csvData = Csv.encode $ map V.fromList table
-        cleanData = removeTrailingNewline csvData --Renove trailing newline if present
-    BL.writeFile fileName cleanData
-    putStrLn $ "Output written to " ++ fileName
-
-removeTrailingNewline :: BL.ByteString -> BL.ByteString
-removeTrailingNewline bs
-  | BL.null bs = bs
-  | BL.last bs == 10 = BL.init bs  -- 10 is ASCII for newline
-  | otherwise = bs
+    let csvText = unlines (map (L.intercalate ",") table)
+        cleanCsv = dropWhileEnd (== '\n') csvText
+    writeFile fileName cleanCsv
 
 
 --INNER MERGE: 2 input tables -> gives one result table
@@ -367,7 +375,7 @@ innerMerge' cond fstTable sndTable =
   let newHeader = head fstTable ++  head sndTable
       fstRows = tail fstTable
       sndRows = tail sndTable
-      mergedRows = mapMaybe (mergeIfMatch cond sndRows) fstRows
+      mergedRows = concat [findAllMatches cond sndRows r1 | r1 <- fstRows]
   in newHeader : mergedRows 
 
 
@@ -382,13 +390,11 @@ leftMerge cond fstTable sndTable =
       blank     = blankRow (head sndTable)   
 
       -- either concatenate with match, or pad with blanks
-      mergeOrPad :: Row -> Row
+      mergeOrPad :: Row -> [Row]
       mergeOrPad r1 =
-        case mergeIfMatch cond sndRows r1 of
-          Just merged -> merged
-          Nothing     -> r1 ++ blank
-
-      mergedRows = map mergeOrPad fstRows
+        let matches = findAllMatches cond sndRows r1
+        in if null matches then [r1 ++ blank] else matches
+      mergedRows = concatMap mergeOrPad fstRows
   in newHeader : mergedRows
 
 
@@ -403,13 +409,12 @@ rightMerge cond fstTable sndTable =
       blankLeft = blankRow (head fstTable)  
 
       -- for each right-table row, find a match on the left
-      mergeOrPad :: Row -> Row
+      mergeOrPad :: Row -> [Row]
       mergeOrPad r2 =
-        case L.find (\r1 -> checkCondition cond r1 r2) fstRows of
-          Just r1 -> r1 ++ r2            
-          Nothing -> blankLeft ++ r2     
+        let matches = [r1 ++ r2 | r1 <- fstRows, checkCondition cond r1 r2]
+        in if null matches then [blankLeft ++ r2] else matches
 
-      mergedRows = map mergeOrPad sndRows
+      mergedRows = concatMap mergeOrPad sndRows
   in newHeader : mergedRows
 
 -- Outer Merge, include all rows from both tables and fill in blanks where the condition is not met
@@ -429,16 +434,26 @@ outerMerge cond fstTable sndTable =
       dedupRows     = L.nubBy rowEquals mergedRows
   in  header : dedupRows
 
+
+cartesianProduct :: Table -> Table -> Table
+cartesianProduct table1 table2 =
+  let header1 = head table1
+      header2 = head table2
+      rows1 = tail table1
+      rows2 = tail table2
+      newHeader = map strip header1 ++ map strip header2
+      newRows = [map strip r1 ++ map strip r2 | r1 <- rows1, r2 <- rows2]
+  in newHeader : newRows
+
+
 rowEquals :: Row -> Row -> Bool
 rowEquals = (==)          -- rows are just equal-length String lists
 
 
---Finds the first match from the second table that matches the condition with the first table
-mergeIfMatch :: Condition -> [Row] -> Row -> Maybe Row
-mergeIfMatch cond sndRows r1 =
-  case L.find (checkCondition cond r1) sndRows of
-    Just r2 -> Just (r1 ++ r2)   
-    Nothing -> Nothing           
+--Finds all matches from the second table that matches the condition with the first table
+findAllMatches :: Condition -> [Row] -> Row -> [Row]
+findAllMatches cond rightRows leftRow =
+  [leftRow ++ rightRow | rightRow <- rightRows, checkCondition cond leftRow rightRow]
           
 
 -- Helper for generating empty cells

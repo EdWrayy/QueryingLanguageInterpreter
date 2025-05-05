@@ -23,6 +23,8 @@ tokens :-
   rightMerge             { \p s -> PT p TokenRightMerge}
   innerMerge             { \p s -> PT p TokenInnerMerge}
   outerMerge             { \p s -> PT p TokenOuterMerge}
+  cartesianProduct      { \p s -> PT p TokenCartesianProduct }
+  coalesceColumns      { \p s -> PT p TokenCoalesceColumns }
 
   rename                 { \p s -> PT p TokenRename}
   drop                   { \p s -> PT p TokenDrop}
@@ -84,6 +86,8 @@ data Token =
   | TokenRightMerge
   | TokenInnerMerge
   | TokenOuterMerge 
+  | TokenCartesianProduct
+  | TokenCoalesceColumns
   | TokenRaw
   | TokenRename
   | TokenDrop
