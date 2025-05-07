@@ -17,9 +17,4 @@ main = do
       content <- readFile fileName
       let tokens = alexScanTokens content
       let ast = parse tokens
-      
-      putStrLn "Parsed AST:"
-      print ast
-      
-      putStrLn "\nQuery Result:"
       interpret ast

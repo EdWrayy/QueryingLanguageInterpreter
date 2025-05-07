@@ -108,7 +108,6 @@ isMergeOp _ = False
 -- Load a CSV file into a Table using cassava
 loadCSV :: String -> IO Table
 loadCSV fileName = do
-  putStrLn $ "Loading file: " ++ fileName
   exists <- doesFileExist fileName
   if not exists
     then do
@@ -293,7 +292,7 @@ aggregateGroup groupColIdx aggFunc (groupKey, rows) =
 
 -- Print the table
 printTable :: Table -> IO ()
-printTable [] = putStrLn "Empty result"
+printTable [] = putStrLn ""
 printTable table = do
   -- Print each row as CSV
   mapM_ (putStrLn . L.intercalate ",") table
@@ -305,7 +304,6 @@ outputResult (Just fileName) table = writeTableToCSV fileName table
 
 writeTableToCSV :: String -> Table -> IO ()
 writeTableToCSV fileName table = do
-    putStrLn $ "Writing output to file: " ++ fileName
     let csvText = unlines (map (L.intercalate ",") table)
         cleanCsv = dropWhileEnd (== '\n') csvText
     writeFile fileName cleanCsv

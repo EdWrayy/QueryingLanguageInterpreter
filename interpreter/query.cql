@@ -1,3 +1,4 @@
-from "employees.csv" to "testy.csv" do
-filter !3 == "95000" && 3 > 90000
-
+from "P.csv" raw to "testy.csv" do
+removePadding
+-> filter 1 != ""
+-> sortLex
