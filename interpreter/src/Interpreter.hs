@@ -298,7 +298,7 @@ printTable table = do
   mapM_ (putStrLn . L.intercalate ",") table
 
 outputResult :: Maybe String -> Table -> IO ()
-outputResult Nothing table = printTable table  -- Output to console if no output file
+outputResult Nothing table = return ()
 outputResult (Just fileName) table = writeTableToCSV fileName table
 
 
