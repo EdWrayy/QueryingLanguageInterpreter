@@ -2,6 +2,9 @@
 
 This project implements a simple query language interpreter that can process data from CSV files according to query operations.
 
+## User Guide
+Please consult the pdf user guide attached to the repo for instructions on how to write a program in the language.
+
 ## File Structure
 
 The project consists of:
